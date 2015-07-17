@@ -5957,6 +5957,7 @@ static enum power_supply_property smbchg_battery_properties[] = {
 	POWER_SUPPLY_PROP_CURRENT_MAX,
 	POWER_SUPPLY_PROP_CURRENT_NOW,
 	POWER_SUPPLY_PROP_TEMP,
+	POWER_SUPPLY_PROP_TEMP_HOTSPOT,
 	POWER_SUPPLY_PROP_VOLTAGE_NOW,
 	POWER_SUPPLY_PROP_RESISTANCE_ID,
 	POWER_SUPPLY_PROP_CHARGE_FULL,
@@ -5994,6 +5995,9 @@ static int smbchg_battery_set_property(struct power_supply *psy,
 				!val->intval, 0);
 		chip->chg_enabled = val->intval;
 		schedule_work(&chip->usb_set_online_work);
+		break;
+	case POWER_SUPPLY_PROP_TEMP_HOTSPOT:
+		chip->hotspot_temp = val->intval;
 		break;
 	case POWER_SUPPLY_PROP_CAPACITY:
 		if (chip->test_mode)
@@ -6206,6 +6210,9 @@ static int smbchg_battery_get_property(struct power_supply *psy,
 		if (chip->test_mode && !(chip->test_mode_temp < -350)
 		    && !(chip->test_mode_temp > 1250))
 			val->intval = chip->test_mode_temp;
+		break;
+	case POWER_SUPPLY_PROP_TEMP_HOTSPOT:
+		val->intval = chip->hotspot_temp;
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_MAX_DESIGN:
 		val->intval = get_prop_batt_voltage_max_design(chip);
