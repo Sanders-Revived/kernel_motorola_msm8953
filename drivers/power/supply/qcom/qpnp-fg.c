@@ -37,6 +37,7 @@
 #include <linux/string_helpers.h>
 #include <linux/alarmtimer.h>
 #include <linux/qpnp/qpnp-revid.h>
+#include <linux/reboot.h>
 /* Register offsets */
 
 /* Interrupt offsets */
@@ -545,6 +546,8 @@ struct fg_chip {
 	bool			charging_disabled;
 	bool			use_vbat_low_empty_soc;
 	bool			fg_shutdown;
+	bool			nom_cap_unbound;
+	struct notifier_block	fg_reboot;
 	bool			use_soft_jeita_irq;
 	bool			allow_false_negative_isense;
 	struct delayed_work	update_jeita_setting;
@@ -4324,6 +4327,8 @@ static int fg_restore_soc(struct fg_chip *chip)
 	return rc;
 }
 
+#define ESR_MAX				300000
+#define ESR_MIN				5000
 #define NOM_CAP_REG			0x4F4
 #define CAPACITY_DELTA_DECIPCT		500
 static int load_battery_aging_data(struct fg_chip *chip)
@@ -6296,8 +6301,8 @@ static int fg_batt_profile_init(struct fg_chip *chip)
 	struct device_node *node = chip->pdev->dev.of_node;
 	struct device_node *batt_node, *profile_node;
 	const char *data, *batt_type_str;
-	bool tried_again = false, vbat_in_range, profiles_same;
-	u8 reg = 0;
+	bool tried_again = false, vbat_in_range, profiles_same, esr_in_range;
+	u8 reg = 0, nom_cap_buf[2];
 
 wait:
 	fg_stay_awake(&chip->profile_wakeup_source);
@@ -6447,9 +6452,12 @@ wait:
 			< settings[FG_MEM_VBAT_EST_DIFF].value * 1000;
 	profiles_same = memcmp(chip->batt_profile, data,
 					PROFILE_COMPARE_LEN) == 0;
+	esr_in_range = ((fg_data[FG_DATA_BATT_ESR].value < ESR_MAX) &&
+			(fg_data[FG_DATA_BATT_ESR].value > ESR_MIN));
 	if (reg & PROFILE_INTEGRITY_BIT) {
 		fg_cap_learning_load_data(chip);
-		if (vbat_in_range && !fg_is_batt_empty(chip) && profiles_same) {
+		if (vbat_in_range && !fg_is_batt_empty(chip) && profiles_same &&
+		    esr_in_range && !chip->nom_cap_unbound) {
 			if (fg_debug_mask & FG_STATUS)
 				pr_info("Battery profiles same, using default\n");
 			if (fg_est_dump)
@@ -6524,6 +6532,19 @@ wait:
 			pr_err("Error in updating ESR, rc=%d\n", rc);
 	}
 done:
+	fg_mem_lock(chip);
+	rc = fg_mem_read(chip, nom_cap_buf, NOM_CAP_REG, 2, 0, 0);
+	fg_mem_release(chip);
+	if (!rc) {
+		chip->nom_cap_unbound = ((bcap_uah_2b(nom_cap_buf) > 5100000) ||
+					 (bcap_uah_2b(nom_cap_buf) < 1500000));
+		if (chip->nom_cap_unbound) {
+			pr_err("nominal capacitance unbound: %d\n",
+			       bcap_uah_2b(nom_cap_buf));
+			goto reschedule;
+		}
+	}
+
 	if (chip->charging_disabled) {
 		rc = set_prop_enable_charging(chip, true);
 		if (rc)
@@ -7482,6 +7503,7 @@ static void fg_cleanup(struct fg_chip *chip)
 	wakeup_source_unregister(chip->esr_extract_wakeup_source.source);
 	wakeup_source_unregister(chip->slope_limit_wakeup_source.source);
 	wakeup_source_unregister(chip->dischg_gain_wakeup_source.source);
+	unregister_reboot_notifier(&chip->fg_reboot);
 	wakeup_source_unregister(chip->fg_reset_wakeup_source.source);
 	wakeup_source_unregister(chip->cc_soc_wakeup_source.source);
 	wakeup_source_unregister(chip->sanity_wakeup_source.source);
@@ -8665,6 +8687,37 @@ done:
 	fg_cleanup(chip);
 }
 
+static int fg_reboot_handler(struct notifier_block *nb,
+			     unsigned long event, void *unused)
+{
+	struct fg_chip *chip = container_of(nb, struct fg_chip, fg_reboot);
+	int rc;
+
+	if (!chip)
+		return NOTIFY_DONE;
+
+	if (get_prop_capacity(chip) <= 5) {
+		dev_warn(chip->dev, "FG Reboot: SOC Low Skip SRAM Hold!\n");
+		return NOTIFY_DONE;
+	}
+
+	switch (event) {
+	case SYS_POWER_OFF:
+		dev_warn(chip->dev, "Assert SRAM to Stop RBIAS!\n");
+		rc = fg_masked_write(chip, MEM_INTF_CFG(chip),
+				     RIF_MEM_ACCESS_REQ,
+				     RIF_MEM_ACCESS_REQ, 1);
+		if (rc)
+			pr_err("failed to set mem access bit\n");
+		msleep(2000);
+		break;
+	default:
+		break;
+	}
+
+	return NOTIFY_DONE;
+}
+
 static int fg_probe(struct platform_device *pdev)
 {
 	struct device *dev = &(pdev->dev);
@@ -8906,6 +8959,10 @@ static int fg_probe(struct platform_device *pdev)
 	chip->batt_range_ocv = &fg_batt_valid_ocv;
 	chip->batt_range_pct = &fg_batt_range_pct;
 	memset(chip->batt_info, INT_MAX, sizeof(chip->batt_info));
+
+	chip->fg_reboot.notifier_call = fg_reboot_handler;
+	chip->fg_reboot.priority = 1;
+	register_reboot_notifier(&chip->fg_reboot);
 
 	schedule_work(&chip->init_work);
 
