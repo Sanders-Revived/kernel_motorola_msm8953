@@ -153,6 +153,13 @@ struct smbchg_chip {
 	bool				skip_usb_suspend_for_fake_battery;
 	bool				hvdcp_not_supported;
 	bool				otg_pinctrl;
+	/* MMI configuration */
+	int				afvc_mv;
+	bool				enable_factory_wa;
+	bool				factory_mode;
+	bool				usbid_disabled;
+	bool				usbid_gpio_enabled;
+	bool				apsd_rerun_at_boot;
 	u8				original_usbin_allowance;
 	struct parallel_usb_cfg		parallel;
 	struct delayed_work		parallel_en_work;
@@ -5848,6 +5855,10 @@ static int smbchg_battery_get_property(struct power_supply *psy,
 	/* properties from fg */
 	case POWER_SUPPLY_PROP_CAPACITY:
 		val->intval = get_prop_batt_capacity(chip);
+		if (chip->factory_mode &&
+		    chip->enable_factory_wa &&
+		    val->intval <= 0)
+			val->intval = 1;
 		break;
 	case POWER_SUPPLY_PROP_CURRENT_NOW:
 		val->intval = get_prop_batt_current_now(chip);
@@ -6508,6 +6519,17 @@ static irqreturn_t usbid_change_handler(int irq, void *_chip)
 	struct smbchg_chip *chip = _chip;
 	bool otg_present;
 
+	/* MMI: USBID handled through GPIO on some boards */
+	if (chip->usbid_gpio_enabled) {
+		pr_smb(PR_INTERRUPT, "gpio usbid triggered\n");
+		return IRQ_HANDLED;
+	}
+
+	if (chip->usbid_disabled) {
+		extcon_set_state_sync(chip->extcon, EXTCON_USB_HOST, false);
+		return IRQ_HANDLED;
+	}
+
 	pr_smb(PR_INTERRUPT, "triggered\n");
 
 	otg_present = is_otg_present(chip);
@@ -6555,6 +6577,7 @@ static int determine_initial_status(struct smbchg_chip *chip)
 	if (chip->usb_present) {
 		pr_smb(PR_MISC, "setting usb dp=f dm=f\n");
 		smbchg_request_dpdm(chip, true);
+		chip->apsd_rerun_at_boot = true;
 		handle_usb_insertion(chip);
 	} else {
 		handle_usb_removal(chip);
@@ -6640,6 +6663,16 @@ static inline int get_bpd(const char *name)
 #define VCHG_INPUT_CURRENT_BIT		BIT(3)
 #define CFG_AFVC			0xF6
 #define VFLOAT_COMP_ENABLE_MASK		SMB_MASK(2, 0)
+/* MMI adapter float voltage compensation steps */
+#define VFLOAT_DIS_VAL			0x00
+#define VFLOAT_25MV_VAL			0x01
+#define VFLOAT_50MV_VAL			0x02
+#define VFLOAT_75MV_VAL			0x03
+#define VFLOAT_100MV_VAL		0x04
+#define VFLOAT_125MV_VAL		0x05
+#define VFLOAT_150MV_VAL		0x06
+#define VFLOAT_175MV_VAL		0x07
+#define CFG_AFVC			0xF6
 #define TR_RID_REG			0xFA
 #define FG_INPUT_FET_DELAY_BIT		BIT(3)
 #define TRIM_OPTIONS_7_0		0xF6
@@ -6887,6 +6920,34 @@ static int smbchg_hw_init(struct smbchg_chip *chip)
 		}
 		pr_smb(PR_STATUS, "set float voltage comp to %d\n",
 			chip->float_voltage_comp);
+	}
+
+	/* MMI adapter float voltage compensation from DT */
+	if (chip->afvc_mv != -EINVAL) {
+		if (chip->afvc_mv < 25)
+			reg = VFLOAT_DIS_VAL;
+		else if (chip->afvc_mv < 50)
+			reg = VFLOAT_25MV_VAL;
+		else if (chip->afvc_mv < 75)
+			reg = VFLOAT_50MV_VAL;
+		else if (chip->afvc_mv < 100)
+			reg = VFLOAT_75MV_VAL;
+		else if (chip->afvc_mv < 125)
+			reg = VFLOAT_100MV_VAL;
+		else if (chip->afvc_mv < 150)
+			reg = VFLOAT_125MV_VAL;
+		else if (chip->afvc_mv < 175)
+			reg = VFLOAT_150MV_VAL;
+		else
+			reg = VFLOAT_175MV_VAL;
+		rc = smbchg_sec_masked_write(chip, chip->chgr_base + CFG_AFVC,
+				VFLOAT_COMP_ENABLE_MASK, reg);
+		if (rc < 0) {
+			dev_err(chip->dev, "Couldn't set AFVC rc = %d\n", rc);
+			return rc;
+		}
+		pr_smb(PR_STATUS, "set AFVC to %d (req %dmV)\n",
+			reg, chip->afvc_mv);
 	}
 
 	/* set iterm */
@@ -7274,6 +7335,15 @@ static int smb_parse_dt(struct smbchg_chip *chip)
 					"qcom,low-volt-dcin");
 	chip->force_aicl_rerun = of_property_read_bool(node,
 					"qcom,force-aicl-rerun");
+	/* MMI policy flags */
+	chip->usbid_disabled = of_property_read_bool(node,
+						"qcom,usbid-disabled");
+	chip->usbid_gpio_enabled = of_property_read_bool(node,
+						"qcom,usbid-gpio-enabled");
+	chip->enable_factory_wa = of_property_read_bool(node,
+					"qcom,enable-factory-wa");
+	OF_PROP_READ(chip, chip->afvc_mv, "auto-voltage-comp-mv",
+			rc, 1);
 	chip->skip_usb_suspend_for_fake_battery = of_property_read_bool(node,
 				"qcom,skip-usb-suspend-for-fake-battery");
 
