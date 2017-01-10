@@ -4080,8 +4080,7 @@ static int selinux_task_kill(struct task_struct *p, struct siginfo *info,
 		perm = signal_to_av(sig);
 	if (!secid)
 		secid = current_sid();
-	return avc_has_perm(&selinux_state,
-			    secid, task_sid(p), SECCLASS_PROCESS, perm, NULL);
+	return avc_has_perm(secid, task_sid(p), SECCLASS_PROCESS, perm, NULL);
 }
 
 static void selinux_task_to_inode(struct task_struct *p,
