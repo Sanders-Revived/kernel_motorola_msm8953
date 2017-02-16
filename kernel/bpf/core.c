@@ -28,6 +28,9 @@
 #include <linux/moduleloader.h>
 #include <linux/bpf.h>
 #include <linux/frame.h>
+#include <linux/rbtree_latch.h>
+#include <linux/kallsyms.h>
+#include <linux/rcupdate.h>
 
 #include <asm/unaligned.h>
 
@@ -96,6 +99,8 @@ struct bpf_prog *bpf_prog_alloc(unsigned int size, gfp_t gfp_extra_flags)
 	fp->pages = size / PAGE_SIZE;
 	fp->aux = aux;
 	fp->aux->prog = fp;
+
+	INIT_LIST_HEAD_RCU(&fp->aux->ksym_lnode);
 
 	return fp;
 }
@@ -230,27 +235,57 @@ static bool bpf_is_jmp_and_has_target(const struct bpf_insn *insn)
 	       BPF_OP(insn->code) != BPF_EXIT;
 }
 
-static void bpf_adj_branches(struct bpf_prog *prog, u32 pos, u32 delta)
+static int bpf_adj_delta_to_off(struct bpf_insn *insn, u32 pos, u32 delta,
+				u32 curr, const bool probe_pass)
 {
+	const s32 off_min = S16_MIN, off_max = S16_MAX;
+	s32 off = insn->off;
+
+	if (curr < pos && curr + off + 1 > pos)
+		off += delta;
+	else if (curr > pos + delta && curr + off + 1 <= pos + delta)
+		off -= delta;
+	if (off < off_min || off > off_max)
+		return -ERANGE;
+	if (!probe_pass)
+		insn->off = off;
+	return 0;
+}
+
+static int bpf_adj_branches(struct bpf_prog *prog, u32 pos, u32 delta,
+			    const bool probe_pass)
+{
+	u32 i, insn_cnt = prog->len + (probe_pass ? delta : 0);
 	struct bpf_insn *insn = prog->insnsi;
-	u32 i, insn_cnt = prog->len;
+	int ret = 0;
 
 	for (i = 0; i < insn_cnt; i++, insn++) {
+		/* In the probing pass we still operate on the original,
+		 * unpatched image in order to check overflows before we
+		 * do any other adjustments. Therefore skip the patchlet.
+		 */
+		if (probe_pass && i == pos) {
+			i += delta + 1;
+			insn++;
+		}
+
 		if (!bpf_is_jmp_and_has_target(insn))
 			continue;
 
-		/* Adjust offset of jmps if we cross boundaries. */
-		if (i < pos && i + insn->off + 1 > pos)
-			insn->off += delta;
-		else if (i > pos + delta && i + insn->off + 1 <= pos + delta)
-			insn->off -= delta;
+		/* Adjust offset of jmps if we cross patch boundaries. */
+		ret = bpf_adj_delta_to_off(insn, pos, delta, i, probe_pass);
+		if (ret)
+			break;
 	}
+
+	return ret;
 }
 
 struct bpf_prog *bpf_patch_insn_single(struct bpf_prog *prog, u32 off,
 				       const struct bpf_insn *patch, u32 len)
 {
 	u32 insn_adj_cnt, insn_rest, insn_delta = len - 1;
+	const u32 cnt_max = S16_MAX;
 	struct bpf_prog *prog_adj;
 
 	/* Since our patchlet doesn't expand the image, we're done. */
@@ -260,6 +295,15 @@ struct bpf_prog *bpf_patch_insn_single(struct bpf_prog *prog, u32 off,
 	}
 
 	insn_adj_cnt = prog->len + insn_delta;
+
+	/* Reject anything that would potentially let the insn->off
+	 * target overflow when we have excessive program expansions.
+	 * We need to probe here before we do any reallocation where
+	 * we afterwards may not fail anymore.
+	 */
+	if (insn_adj_cnt > cnt_max &&
+	    bpf_adj_branches(prog, off, insn_delta, true))
+		return NULL;
 
 	/* Several new instructions need to be inserted. Make room
 	 * for them. Likely, there's no need for a new allocation as
@@ -286,7 +330,11 @@ struct bpf_prog *bpf_patch_insn_single(struct bpf_prog *prog, u32 off,
 		sizeof(*patch) * insn_rest);
 	memcpy(prog_adj->insnsi + off, patch, sizeof(*patch) * len);
 
-	bpf_adj_branches(prog_adj, off, insn_delta);
+	/* We are guaranteed to not fail at this point, otherwise
+	 * the ship has sailed to reverse to the original state. An
+	 * overflow cannot happen at this point.
+	 */
+	BUG_ON(bpf_adj_branches(prog_adj, off, insn_delta, false));
 
 	return prog_adj;
 }
@@ -341,6 +389,213 @@ static void bpf_jit_uncharge_modmem(u32 pages)
 	atomic_long_sub(pages, &bpf_jit_current);
 }
 
+#if IS_ENABLED(CONFIG_BPF_JIT) && IS_ENABLED(CONFIG_CFI_CLANG)
+bool __weak arch_bpf_jit_check_func(const struct bpf_prog *prog)
+{
+	return true;
+}
+EXPORT_SYMBOL(arch_bpf_jit_check_func);
+#endif
+static __always_inline void
+bpf_get_prog_addr_region(const struct bpf_prog *prog,
+			 unsigned long *symbol_start,
+			 unsigned long *symbol_end)
+{
+	const struct bpf_binary_header *hdr = bpf_jit_binary_hdr(prog);
+	unsigned long addr = (unsigned long)hdr;
+
+	WARN_ON_ONCE(!bpf_prog_ebpf_jited(prog));
+
+	*symbol_start = addr;
+	*symbol_end   = addr + hdr->pages * PAGE_SIZE;
+}
+
+static void bpf_get_prog_name(const struct bpf_prog *prog, char *sym)
+{
+	BUILD_BUG_ON(sizeof("bpf_prog_") +
+		     sizeof(prog->tag) * 2 + 1 > KSYM_NAME_LEN);
+
+	sym += snprintf(sym, KSYM_NAME_LEN, "bpf_prog_");
+	sym  = bin2hex(sym, prog->tag, sizeof(prog->tag));
+	*sym = 0;
+}
+
+static __always_inline unsigned long
+bpf_get_prog_addr_start(struct latch_tree_node *n)
+{
+	unsigned long symbol_start, symbol_end;
+	const struct bpf_prog_aux *aux;
+
+	aux = container_of(n, struct bpf_prog_aux, ksym_tnode);
+	bpf_get_prog_addr_region(aux->prog, &symbol_start, &symbol_end);
+
+	return symbol_start;
+}
+
+static __always_inline bool bpf_tree_less(struct latch_tree_node *a,
+					  struct latch_tree_node *b)
+{
+	return bpf_get_prog_addr_start(a) < bpf_get_prog_addr_start(b);
+}
+
+static __always_inline int bpf_tree_comp(void *key, struct latch_tree_node *n)
+{
+	unsigned long val = (unsigned long)key;
+	unsigned long symbol_start, symbol_end;
+	const struct bpf_prog_aux *aux;
+
+	aux = container_of(n, struct bpf_prog_aux, ksym_tnode);
+	bpf_get_prog_addr_region(aux->prog, &symbol_start, &symbol_end);
+
+	if (val < symbol_start)
+		return -1;
+	if (val >= symbol_end)
+		return  1;
+
+	return 0;
+}
+
+static const struct latch_tree_ops bpf_tree_ops = {
+	.less	= bpf_tree_less,
+	.comp	= bpf_tree_comp,
+};
+
+static DEFINE_SPINLOCK(bpf_lock);
+static LIST_HEAD(bpf_kallsyms);
+static struct latch_tree_root bpf_tree __cacheline_aligned;
+
+int bpf_jit_kallsyms __read_mostly;
+
+static void bpf_prog_ksym_node_add(struct bpf_prog_aux *aux)
+{
+	WARN_ON_ONCE(!list_empty(&aux->ksym_lnode));
+	list_add_tail_rcu(&aux->ksym_lnode, &bpf_kallsyms);
+	latch_tree_insert(&aux->ksym_tnode, &bpf_tree, &bpf_tree_ops);
+}
+
+static void bpf_prog_ksym_node_del(struct bpf_prog_aux *aux)
+{
+	if (list_empty(&aux->ksym_lnode))
+		return;
+
+	latch_tree_erase(&aux->ksym_tnode, &bpf_tree, &bpf_tree_ops);
+	list_del_rcu(&aux->ksym_lnode);
+}
+
+static bool bpf_prog_kallsyms_candidate(const struct bpf_prog *fp)
+{
+	return fp->jited && !bpf_prog_was_classic(fp);
+}
+
+static bool bpf_prog_kallsyms_verify_off(const struct bpf_prog *fp)
+{
+	return list_empty(&fp->aux->ksym_lnode) ||
+	       fp->aux->ksym_lnode.prev == LIST_POISON2;
+}
+
+void bpf_prog_kallsyms_add(struct bpf_prog *fp)
+{
+	unsigned long flags;
+
+	if (!bpf_prog_kallsyms_candidate(fp) ||
+	    !capable(CAP_SYS_ADMIN))
+		return;
+
+	spin_lock_irqsave(&bpf_lock, flags);
+	bpf_prog_ksym_node_add(fp->aux);
+	spin_unlock_irqrestore(&bpf_lock, flags);
+}
+
+void bpf_prog_kallsyms_del(struct bpf_prog *fp)
+{
+	unsigned long flags;
+
+	if (!bpf_prog_kallsyms_candidate(fp))
+		return;
+
+	spin_lock_irqsave(&bpf_lock, flags);
+	bpf_prog_ksym_node_del(fp->aux);
+	spin_unlock_irqrestore(&bpf_lock, flags);
+}
+
+static struct bpf_prog *bpf_prog_kallsyms_find(unsigned long addr)
+{
+	struct latch_tree_node *n;
+
+	if (!bpf_jit_kallsyms_enabled())
+		return NULL;
+
+	n = latch_tree_find((void *)addr, &bpf_tree, &bpf_tree_ops);
+	return n ?
+	       container_of(n, struct bpf_prog_aux, ksym_tnode)->prog :
+	       NULL;
+}
+
+const char *__bpf_address_lookup(unsigned long addr, unsigned long *size,
+				 unsigned long *off, char *sym)
+{
+	unsigned long symbol_start, symbol_end;
+	struct bpf_prog *prog;
+	char *ret = NULL;
+
+	rcu_read_lock();
+	prog = bpf_prog_kallsyms_find(addr);
+	if (prog) {
+		bpf_get_prog_addr_region(prog, &symbol_start, &symbol_end);
+		bpf_get_prog_name(prog, sym);
+
+		ret = sym;
+		if (size)
+			*size = symbol_end - symbol_start;
+		if (off)
+			*off  = addr - symbol_start;
+	}
+	rcu_read_unlock();
+
+	return ret;
+}
+
+bool is_bpf_text_address(unsigned long addr)
+{
+	bool ret;
+
+	rcu_read_lock();
+	ret = bpf_prog_kallsyms_find(addr) != NULL;
+	rcu_read_unlock();
+
+	return ret;
+}
+
+int bpf_get_kallsym(unsigned int symnum, unsigned long *value, char *type,
+		    char *sym)
+{
+	unsigned long symbol_start, symbol_end;
+	struct bpf_prog_aux *aux;
+	unsigned int it = 0;
+	int ret = -ERANGE;
+
+	if (!bpf_jit_kallsyms_enabled())
+		return ret;
+
+	rcu_read_lock();
+	list_for_each_entry_rcu(aux, &bpf_kallsyms, ksym_lnode) {
+		if (it++ != symnum)
+			continue;
+
+		bpf_get_prog_addr_region(aux->prog, &symbol_start, &symbol_end);
+		bpf_get_prog_name(aux->prog, sym);
+
+		*value = symbol_start;
+		*type  = BPF_SYM_ELF_TYPE;
+
+		ret = 0;
+		break;
+	}
+	rcu_read_unlock();
+
+	return ret;
+}
+
 struct bpf_binary_header *
 bpf_jit_binary_alloc(unsigned int proglen, u8 **image_ptr,
 		     unsigned int alignment,
@@ -367,6 +622,7 @@ bpf_jit_binary_alloc(unsigned int proglen, u8 **image_ptr,
 	/* Fill space with illegal/arch-dep instructions. */
 	bpf_fill_ill_insns(hdr, size);
 
+	bpf_jit_set_header_magic(hdr);
 	hdr->pages = pages;
 	hole = min_t(unsigned int, size - (proglen + sizeof(*hdr)),
 		     PAGE_SIZE - sizeof(*hdr));
@@ -384,6 +640,24 @@ void bpf_jit_binary_free(struct bpf_binary_header *hdr)
 
 	module_memfree(hdr);
 	bpf_jit_uncharge_modmem(pages);
+}
+
+/* This symbol is only overridden by archs that have different
+ * requirements than the usual eBPF JITs, f.e. when they only
+ * implement cBPF JIT, do not set images read-only, etc.
+ */
+void __weak bpf_jit_free(struct bpf_prog *fp)
+{
+	if (fp->jited) {
+		struct bpf_binary_header *hdr = bpf_jit_binary_hdr(fp);
+
+		bpf_jit_binary_unlock_ro(hdr);
+		bpf_jit_binary_free(hdr);
+
+		WARN_ON_ONCE(!bpf_prog_kallsyms_verify_off(fp));
+	}
+
+	bpf_prog_unlock_free(fp);
 }
 
 static int bpf_jit_blind_insn(const struct bpf_insn *from,

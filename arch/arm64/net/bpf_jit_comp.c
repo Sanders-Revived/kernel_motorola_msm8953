@@ -911,17 +911,24 @@ out:
 	return prog;
 }
 
-void bpf_jit_free(struct bpf_prog *prog)
+#ifdef CONFIG_CFI_CLANG
+bool arch_bpf_jit_check_func(const struct bpf_prog *prog)
 {
-	unsigned long addr = (unsigned long)prog->bpf_func & PAGE_MASK;
-	struct bpf_binary_header *header = (void *)addr;
+	const uintptr_t func = (const uintptr_t)prog->bpf_func;
 
-	if (!prog->jited)
-		goto free_filter;
+	/*
+	 * bpf_func must be correctly aligned and within the correct region.
+	 * module_alloc places JIT code in the module region, unless
+	 * ARM64_MODULE_PLTS is enabled, in which case we might end up using
+	 * the vmalloc region too.
+	 */
+	if (unlikely(!IS_ALIGNED(func, sizeof(u32))))
+		return false;
 
-	set_memory_rw(addr, header->pages);
-	bpf_jit_binary_free(header);
+	if (IS_ENABLED(CONFIG_ARM64_MODULE_PLTS) &&
+			is_vmalloc_addr(prog->bpf_func))
+		return true;
 
-free_filter:
-	bpf_prog_unlock_free(prog);
+	return (func >= MODULES_VADDR && func < MODULES_END);
 }
+#endif
