@@ -512,3 +512,18 @@ void __init dst_subsys_init(void)
 {
 	register_netdevice_notifier(&dst_dev_notifier);
 }
+void metadata_dst_free_percpu(struct metadata_dst __percpu *md_dst)
+{
+	int cpu;
+
+#ifdef CONFIG_DST_CACHE
+	for_each_possible_cpu(cpu) {
+		struct metadata_dst *one_md_dst = per_cpu_ptr(md_dst, cpu);
+
+		if (one_md_dst->type == METADATA_IP_TUNNEL)
+			dst_cache_destroy(&one_md_dst->u.tun_info.dst_cache);
+	}
+#endif
+	free_percpu(md_dst);
+}
+EXPORT_SYMBOL_GPL(metadata_dst_free_percpu);
