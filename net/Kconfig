@@ -445,6 +445,8 @@ config MAY_USE_DEVLINK
 	  devlink is a loadable module and the driver using it is built-in.
 
 source "net/ipc_router/Kconfig"
+config PAGE_POOL
+       bool
 
 endif   # if NET
 
