@@ -14,7 +14,7 @@
 #include <linux/module.h>
 
 /*
-   Mauro Carvalho Chehab <mchehab@infradead.org>
+   Mauro Carvalho Chehab <mchehab@kernel.org>
    present on PV MPEG 8000GT
  */
 
