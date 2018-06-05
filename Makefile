@@ -554,6 +554,10 @@ endif
 KBUILD_CPPFLAGS += $(call cc-option,-Qunused-arguments,)
 endif
 
+ifeq ($(call shell-cached,$(CONFIG_SHELL) $(srctree)/scripts/cc-can-link.sh $(CC)), y)
+  CC_CAN_LINK := y
+  export CC_CAN_LINK
+endif
 
 ifeq ($(mixed-targets),1)
 # ===========================================================================
