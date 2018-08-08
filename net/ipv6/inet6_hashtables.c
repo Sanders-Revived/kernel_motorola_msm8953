@@ -146,7 +146,7 @@ struct sock *inet6_lookup_listener(struct net *net,
 				result = reuseport_select_sock(sk, phash,
 							       skb, doff);
 				if (result)
-					return result;
+					goto done;
 				matches = 1;
 			}
 			result = sk;
@@ -158,6 +158,9 @@ struct sock *inet6_lookup_listener(struct net *net,
 			phash = next_pseudo_random32(phash);
 		}
 	}
+done:
+	if (unlikely(IS_ERR(result)))
+		return NULL;
 	return result;
 }
 EXPORT_SYMBOL_GPL(inet6_lookup_listener);
