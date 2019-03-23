@@ -2975,8 +2975,8 @@ static int bpf_skb_net_grow(struct sk_buff *skb, u32 off, u32 len_diff,
 			    u64 flags)
 {
 	bool encap = flags & BPF_F_ADJ_ROOM_ENCAP_L3_MASK;
+	u16 mac_len = 0, inner_net = 0, inner_trans = 0;
 	unsigned int gso_type = SKB_GSO_DODGY;
-	u16 mac_len, inner_net, inner_trans;
 	int ret;
 
 	/* No UDP GSO (SKB_GSO_UDP_L4) in 4.9: only TCP GSO can be adjusted. */
