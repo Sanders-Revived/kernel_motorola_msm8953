@@ -8919,6 +8919,7 @@ static void rerun_hvdcp_det_if_necessary(struct smbchg_chip *chip)
 	}
 }
 
+static struct smbchg_chip *the_chip;
 
 static bool smbchg_charger_mmi_factory(void)
 {
@@ -8952,6 +8953,143 @@ static bool qpnp_smbcharger_test_mode(void)
 
 	return test;
 }
+
+static ssize_t force_demo_mode_store(struct device *dev,
+				struct device_attribute *attr,
+				const char *buf, size_t count)
+{
+	unsigned long r;
+	unsigned long mode;
+
+	r = kstrtoul(buf, 0, &mode);
+	if (r) {
+		pr_err("Invalid demo mode value = %lu\n", mode);
+		return -EINVAL;
+	}
+
+	if (!the_chip) {
+		pr_err("chip not valid\n");
+		return -ENODEV;
+	}
+
+	the_chip->stepchg_state_holdoff = 0;
+
+	if ((mode >= 35) && (mode <= 80))
+		the_chip->demo_mode = mode;
+	else
+		the_chip->demo_mode = 35;
+
+	return r ? r : count;
+}
+
+static ssize_t force_demo_mode_show(struct device *dev,
+				    struct device_attribute *attr,
+				    char *buf)
+{
+	int state;
+
+	if (!the_chip) {
+		pr_err("chip not valid\n");
+		return -ENODEV;
+	}
+
+	state = the_chip->demo_mode;
+
+	return scnprintf(buf, CHG_SHOW_MAX_SIZE, "%d\n", state);
+}
+
+static ssize_t factory_image_mode_store(struct device *dev,
+				struct device_attribute *attr,
+				const char *buf, size_t count)
+{
+	unsigned long r;
+	unsigned long mode;
+
+	r = kstrtoul(buf, 0, &mode);
+	if (r) {
+		pr_err("Invalid factory image mode value = %lu\n", mode);
+		return -EINVAL;
+	}
+
+	if (!the_chip) {
+		pr_err("chip not valid\n");
+		return -ENODEV;
+	}
+
+	the_chip->is_factory_image = (mode) ? true : false;
+
+	return r ? r : count;
+}
+
+static ssize_t factory_image_mode_show(struct device *dev,
+				    struct device_attribute *attr,
+				    char *buf)
+{
+	int state;
+
+	if (!the_chip) {
+		pr_err("chip not valid\n");
+		return -ENODEV;
+	}
+
+	state = (the_chip->is_factory_image) ? 1 : 0;
+
+	return scnprintf(buf, CHG_SHOW_MAX_SIZE, "%d\n", state);
+}
+
+static ssize_t force_max_chrg_temp_store(struct device *dev,
+				struct device_attribute *attr,
+				const char *buf, size_t count)
+{
+	unsigned long r;
+	unsigned long mode;
+
+	r = kstrtoul(buf, 0, &mode);
+	if (r) {
+		pr_err("Invalid max temp value = %lu\n", mode);
+		return -EINVAL;
+	}
+
+	if (!the_chip) {
+		pr_err("chip not valid\n");
+		return -ENODEV;
+	}
+
+	if ((mode >= MIN_MAX_TEMP_C) && (mode <= MAX_TEMP_C))
+		the_chip->max_chrg_temp = mode;
+	else
+		the_chip->max_chrg_temp = MAX_TEMP_C;
+
+	return r ? r : count;
+}
+
+static ssize_t force_max_chrg_temp_show(struct device *dev,
+				    struct device_attribute *attr,
+				    char *buf)
+{
+	int state;
+
+	if (!the_chip) {
+		pr_err("chip not valid\n");
+		return -ENODEV;
+	}
+
+	state = the_chip->max_chrg_temp;
+
+	return scnprintf(buf, CHG_SHOW_MAX_SIZE, "%d\n", state);
+}
+
+static DEVICE_ATTR(factory_image_mode, 0644,
+		factory_image_mode_show,
+		factory_image_mode_store);
+
+static DEVICE_ATTR(force_demo_mode, 0644,
+		force_demo_mode_show,
+		force_demo_mode_store);
+
+static DEVICE_ATTR(force_max_chrg_temp, 0644,
+		force_max_chrg_temp_show,
+		force_max_chrg_temp_store);
 
 static int smbchg_probe(struct platform_device *pdev)
 {
@@ -9283,6 +9421,29 @@ static int smbchg_probe(struct platform_device *pdev)
 	update_usb_status(chip, is_usb_present(chip), false);
 	dump_regs(chip);
 
+	the_chip = chip;
+
+	rc = device_create_file(chip->dev,
+				&dev_attr_force_demo_mode);
+	if (rc) {
+		dev_err(chip->dev, "couldn't create force_demo_mode\n");
+		goto remove_sysfs;
+	}
+
+	rc = device_create_file(chip->dev,
+				&dev_attr_factory_image_mode);
+	if (rc) {
+		dev_err(chip->dev, "couldn't create factory_image_mode\n");
+		goto remove_sysfs;
+	}
+
+	rc = device_create_file(chip->dev,
+				&dev_attr_force_max_chrg_temp);
+	if (rc) {
+		dev_err(chip->dev, "couldn't create force_max_chrg_temp\n");
+		goto remove_sysfs;
+	}
+
 	/* MMI: run the temp/step policy shortly after boot */
 	smbchg_stay_awake(chip, PM_HEARTBEAT);
 	schedule_delayed_work(&chip->heartbeat_work,
@@ -9300,7 +9461,13 @@ static int smbchg_probe(struct platform_device *pdev)
 unregister_led_class:
 	if (chip->cfg_chg_led_support && chip->schg_version == QPNP_SCHG_LITE)
 		led_classdev_unregister(&chip->led_cdev);
+remove_sysfs:
 out:
+	/* safe even if the files were never created */
+	device_remove_file(chip->dev, &dev_attr_force_demo_mode);
+	device_remove_file(chip->dev, &dev_attr_factory_image_mode);
+	device_remove_file(chip->dev, &dev_attr_force_max_chrg_temp);
+	the_chip = NULL;
 	handle_usb_removal(chip);
 votables_cleanup:
 	if (chip->hvdcp_enable_votable)
@@ -9331,6 +9498,10 @@ static int smbchg_remove(struct platform_device *pdev)
 	struct smbchg_chip *chip = dev_get_drvdata(&pdev->dev);
 
 	cancel_delayed_work_sync(&chip->heartbeat_work);
+	device_remove_file(chip->dev, &dev_attr_force_demo_mode);
+	device_remove_file(chip->dev, &dev_attr_factory_image_mode);
+	device_remove_file(chip->dev, &dev_attr_force_max_chrg_temp);
+	the_chip = NULL;
 	debugfs_remove_recursive(chip->debug_root);
 
 	destroy_votable(chip->aicl_deglitch_short_votable);
