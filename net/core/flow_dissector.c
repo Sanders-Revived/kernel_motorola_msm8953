@@ -258,6 +258,8 @@ bool bpf_flow_dissect(struct bpf_prog *prog, struct bpf_flow_dissector *ctx,
  * @proto: protocol for which to get the flow, if @data is NULL use skb->protocol
  * @nhoff: network header offset, if @data is NULL use skb_network_offset(skb)
  * @hlen: packet header length, if @data is NULL use skb_headlen(skb)
+ * @flags: flags that control the dissection process, e.g.
+ *         FLOW_DISSECTOR_F_STOP_AT_ENCAP.
  *
  * The function will try to retrieve individual keys into target specified
  * by flow_dissector from either the skbuff or a raw buffer specified by the
@@ -397,8 +399,6 @@ ip:
 			}
 		}
 
-		if (flags & FLOW_DISSECTOR_F_STOP_AT_L3)
-			goto out_good;
 
 		break;
 	}
@@ -444,8 +444,6 @@ ipv6:
 				goto out_good;
 		}
 
-		if (flags & FLOW_DISSECTOR_F_STOP_AT_L3)
-			goto out_good;
 
 		break;
 	}
