@@ -422,7 +422,7 @@ bool __weak arch_bpf_jit_check_func(const struct bpf_prog *prog)
 {
 	return true;
 }
-EXPORT_SYMBOL(arch_bpf_jit_check_func);
+EXPORT_SYMBOL_GPL(arch_bpf_jit_check_func);
 #endif
 static __always_inline void
 bpf_get_prog_addr_region(const struct bpf_prog *prog,
