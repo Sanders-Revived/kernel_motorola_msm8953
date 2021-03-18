@@ -1906,6 +1906,11 @@ config MEMBARRIER
 
 	  If unsure, say Y.
 
+config HAVE_ARCH_USERFAULTFD_MINOR
+	bool
+	help
+	 Arch has userfaultfd minor fault support
+
 config EMBEDDED
 	bool "Embedded system"
 	option allnoconfig_y
