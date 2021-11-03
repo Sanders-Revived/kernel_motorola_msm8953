@@ -55,6 +55,15 @@ struct strp_rx_msg {
 	int offset;
 };
 
+/* Layout of skb->cb used by sk_skb BPF programs (upstream ff4f343f6a81).
+ * Only the private data area is used by net/core/filter.c on this kernel;
+ * the 4.9 strparser itself still keeps its state in qdisc_skb_cb.
+ */
+struct sk_skb_cb {
+#define SK_SKB_CB_PRIV_LEN 20
+	unsigned char data[SK_SKB_CB_PRIV_LEN];
+};
+
 static inline struct strp_rx_msg *strp_rx_msg(struct sk_buff *skb)
 {
 	return (struct strp_rx_msg *)((void *)skb->cb +
