@@ -70,14 +70,39 @@
 #include "ebitmap.h"
 #include "audit.h"
 
-/* Policy capability names */
-const char *selinux_policycap_names[__POLICYDB_CAPABILITY_MAX] = {
-	"network_peer_controls",
-	"open_perms",
-	"compat1",
-	"always_check_network",
-	"compat2",
-	"nnp_nosuid_transition"
+int selinux_android_netlink_route;
+int selinux_policycap_netpeer;
+int selinux_policycap_openperm;
+int selinux_policycap_alwaysnetwork;
+
+static DEFINE_RWLOCK(policy_rwlock);
+
+static struct sidtab sidtab;
+struct policydb policydb;
+int ss_initialized;
+
+/*
+ * The largest sequence number that has been used when
+ * providing an access decision to the access vector cache.
+ * The sequence number only changes when a policy change
+ * occurs.
+ */
+static u32 latest_granting;
+
+/* Forward declaration. */
+static int context_struct_to_string(struct context *context, char **scontext,
+				    u32 *scontext_len);
+
+static void context_struct_compute_av(struct context *scontext,
+					struct context *tcontext,
+					u16 tclass,
+					struct av_decision *avd,
+					struct extended_perms *xperms);
+
+struct selinux_mapping {
+	u16 value; /* policy value */
+	unsigned num_perms;
+	u32 perms[sizeof(u32) * 8];
 };
 
 int selinux_android_netlink_route;
@@ -2096,11 +2121,7 @@ static void security_load_policycaps(struct selinux_state *state)
 	unsigned int i;
 	struct ebitmap_node *node;
 
-	for (i = 0; i < ARRAY_SIZE(state->policycap); i++)
-		state->policycap[i] = ebitmap_get_bit(&p->policycaps, i);
-
-	selinux_android_netlink_route = p->android_netlink_route;
-	selinux_android_netlink_getneigh = p->android_netlink_getneigh;
+	selinux_android_netlink_route = policydb.android_netlink_route;
 	selinux_nlmsg_init();
 
 	for (i = 0; i < ARRAY_SIZE(selinux_policycap_names); i++)
