@@ -3116,13 +3116,22 @@ static int bpf_skb_net_grow(struct sk_buff *skb, u32 off, u32 len_diff,
 	}
 
 	if (skb_is_gso(skb)) {
-		/* Due to header grow, MSS needs to be downgraded. */
-		if (!(flags & BPF_F_ADJ_ROOM_FIXED_GSO))
-			skb_shinfo(skb)->gso_size -= len_diff;
+		struct skb_shared_info *shinfo = skb_shinfo(skb);
 
 		/* Header must be checked, and gso_segs recomputed. */
-		skb_shinfo(skb)->gso_type |= gso_type;
-		skb_shinfo(skb)->gso_segs = 0;
+		shinfo->gso_type |= gso_type;
+		shinfo->gso_segs = 0;
+
+		/* Due to header growth, MSS needs to be downgraded.
+		 * There is a BUG_ON() when segmenting the frag_list with
+		 * head_frag true, so linearize the skb after downgrading
+		 * the MSS.
+		 */
+		if (!(flags & BPF_F_ADJ_ROOM_FIXED_GSO)) {
+			shinfo->gso_size -= len_diff;
+			if (shinfo->frag_list)
+				return skb_linearize(skb);
+		}
 	}
 
 	return 0;
