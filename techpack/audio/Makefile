@@ -1,4 +1,3 @@
-ifneq ($(CONFIG_NO_TECHPACK_AUDIO),y)
 # auto-detect subdirs
 ifeq ($(CONFIG_ARCH_MSM8937), y)
 include $(srctree)/techpack/audio/config/msm8937auto.conf
@@ -48,6 +47,3 @@ obj-y += asoc/
 obj-y += dsp/
 obj-y += ipc/
 obj-y += soc/
-else # CONFIG_NO_TECHPACK_AUDIO
-obj-y += no_techpack_audio.o
-endif # CONFIG_NO_TECHPACK_AUDIO

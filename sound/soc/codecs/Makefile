@@ -140,7 +140,6 @@ snd-soc-sta350-objs := sta350.o
 snd-soc-sta529-objs := sta529.o
 snd-soc-stac9766-objs := stac9766.o
 snd-soc-sti-sas-objs := sti-sas.o
-snd-soc-tas2560-objs := tas2560-core.o tas2560-misc.o tas2560-codec.o tas2560-regmap.o tas2560-calib.o
 snd-soc-tas5086-objs := tas5086.o
 snd-soc-tas571x-objs := tas571x.o
 snd-soc-tas5720-objs := tas5720.o
@@ -368,7 +367,6 @@ obj-$(CONFIG_SND_SOC_STA529)   += snd-soc-sta529.o
 obj-$(CONFIG_SND_SOC_STAC9766)	+= snd-soc-stac9766.o
 obj-$(CONFIG_SND_SOC_STI_SAS)	+= snd-soc-sti-sas.o
 obj-$(CONFIG_SND_SOC_TAS2552)	+= snd-soc-tas2552.o
-obj-$(CONFIG_SND_SOC_TAS2560) += snd-soc-tas2560.o
 obj-$(CONFIG_SND_SOC_TAS5086)	+= snd-soc-tas5086.o
 obj-$(CONFIG_SND_SOC_TAS571X)	+= snd-soc-tas571x.o
 obj-$(CONFIG_SND_SOC_TAS5720)	+= snd-soc-tas5720.o
@@ -451,13 +449,3 @@ obj-$(CONFIG_SND_SOC_MAX98504)	+= snd-soc-max98504.o
 obj-$(CONFIG_SND_SOC_TPA6130A2)	+= snd-soc-tpa6130a2.o
 obj-$(CONFIG_SND_SOC_AW8896)	+= snd-soc-aw8896.o
 obj-$(CONFIG_SND_SOC_TFA98XX)	+= snd-soc-tfa98xx.o
-
-# for tas2560 dsp algo controls
-obj-$(CONFIG_SND_SOC_TAS2560) += tas2560-algo.o
-
-ifeq ($(CONFIG_SND_SOC_TAS2560), y)
-
-EXTRA_CFLAGS += -Itechpack/audio/include
-EXTRA_CFLAGS += -Itechpack/audio/include/uapi
-
-endif

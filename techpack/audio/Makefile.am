@@ -1,4 +1,3 @@
-ifneq ($(CONFIG_NO_TECHPACK_AUDIO),y)
 KBUILD_OPTIONS := AUDIO_ROOT=$(PWD)
 KBUILD_OPTIONS += MODNAME=audio
 KBUILD_OPTIONS += HEADER_INSTALL_DIR=$(KERNEL_SRC)/scripts
@@ -16,9 +15,6 @@ endif
 ifeq ($(TARGET_SUPPORT),apq8009)
 KBUILD_OPTIONS += CONFIG_ARCH_MSM8909=y
 endif
-ifeq ($(TARGET_SUPPORT),msm8917)
-KBUILD_OPTIONS += CONFIG_ARCH_MSM8937=y
-endif
 ifeq ($(TARGET_SUPPORT),msm8937)
 KBUILD_OPTIONS += CONFIG_ARCH_MSM8937=y
 endif
@@ -32,7 +28,7 @@ obj-m += asoc/codecs/
 ifeq ($(TARGET_SUPPORT), $(filter $(TARGET_SUPPORT), sdm670 qcs605))
 obj-m += asoc/codecs/wcd934x/
 endif
-ifeq ($(TARGET_SUPPORT), $(filter $(TARGET_SUPPORT), apq8053 sdm670 qcs605 apq8009 msm8917 msm8937))
+ifeq ($(TARGET_SUPPORT), $(filter $(TARGET_SUPPORT), apq8053 sdm670 qcs605 apq8009 msm8937))
 obj-m += asoc/codecs/sdm660_cdc/
 endif
 ifeq ($(TARGET_SUPPORT), $(filter $(TARGET_SUPPORT), sdm670 qcs605))
@@ -56,4 +52,3 @@ modules_install:
 clean:
 	rm -f *.o *.ko *.mod.c *.mod.o *~ .*.cmd Module.symvers
 	rm -rf .tmp_versions
-endif # CONFIG_NO_TECHPACK_AUDIO
