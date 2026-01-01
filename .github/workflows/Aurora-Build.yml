@@ -43,13 +43,24 @@ jobs:
           seconds=$((duration % 60))
           echo "BUILD_DURATION=${minutes}m ${seconds}s" >> $GITHUB_ENV
 
+      - name: Get KernelSU Version
+        id: ksu_version
+        run: |
+          if [ -d "KernelSU" ]; then
+            KSU_VERSION=$(cd KernelSU && git describe --tags $(git rev-list --tags --max-count=1))
+          else
+            KSU_VERSION="Unknown"
+          fi
+          echo "KSU_VERSION=$KSU_VERSION" >> $GITHUB_ENV
+
       - name: Upload to Telegram
         uses: appleboy/telegram-action@master
         with:
           to: ${{ secrets.TELEGRAM_CHAT_ID }}
           token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          document: Aurora-Kernel-sanders*.zip
+          document: Aurora-Kernel*.zip
           message: |
             🌌 New Aurora Kernel build available!
             📱 Device: Moto G5s Plus (sanders)
             ⏱ Build time: ${{ env.BUILD_DURATION }}
+            ⚡KernelSU Version: ${{ env.KSU_VERSION }}

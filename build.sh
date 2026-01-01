@@ -26,7 +26,7 @@ BOOT_DIR="$OUT_DIR/arch/arm64/boot"
 KERNEL_IMG="$BOOT_DIR/Image.gz"
 
 # ===== Zip =====
-ZIPNAME="Aurora-Kernel-${DEVICE}-$(date '+%Y%m%d-%H%M')"
+ZIPNAME="Aurora-Kernel-KSU-${DEVICE}-$(date '+%Y%m%d-%H%M')"
 if test -z "$(git rev-parse --show-cdup 2>/dev/null)" &&
    head=$(git rev-parse --verify HEAD 2>/dev/null); then
     ZIPNAME="${ZIPNAME}-$(echo "$head" | cut -c1-8)"
@@ -64,6 +64,8 @@ if ! [ -d "$TC_DIR" ]; then
         https://gitlab.com/ThankYouMario/android_prebuilts_clang-standalone \
         "$TC_DIR" || exit 1
 fi
+
+curl -LSs "https://raw.githubusercontent.com/backslashxx/KernelSU/refs/heads/master/kernel/setup.sh" | bash -s master
 
 # ===== Build =====
 mkdir -p out
