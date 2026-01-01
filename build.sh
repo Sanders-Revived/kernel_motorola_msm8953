@@ -1,149 +1,108 @@
-SECONDS=0 # builtin bash timer
-SUPPORTED_DEVICES=(aljeter aljeter_recovery sanders sanders_recovery)
+#!/usr/bin/env bash
+#
+# Build script – Aurora Kernel (sanders)
+# Moto G5s Plus
+#
 
-GREEN='\033[0;32m'
-RED='\033[0;31m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m'
+SECONDS=0
 
-if [[ " ${SUPPORTED_DEVICES[@]} " =~ " $1 " ]]; then
-    DEVICE=$1
-    ARGUMENT=$2
-else
-    echo -e "\n${YELLOW}Select the device to compile:${NC}"
-    select DEVICE in "${SUPPORTED_DEVICES[@]}"; do
-        if [[ " ${SUPPORTED_DEVICES[@]} " =~ " ${DEVICE} " ]]; then
-            ARGUMENT=$1
-            break
-        else
-            echo -e "\n${RED}Invalid option. Please choose again.${NC}"
-        fi
-    done
-fi
+# ===== Device / Kernel =====
+DEVICE="sanders"
+DEVICE_NAME="Moto G5s Plus"
+DEFCONFIG="sanders_defconfig"
 
-AK3_BRANCH=${DEVICE%_recovery}
-
-ZIPNAME="Kernel-${DEVICE}-$(date '+%Y%m%d-%H%M').zip"
+# ===== Toolchain =====
 TC_DIR="$(pwd)/tc/clang-r522817"
-AK3_DIR="$(pwd)/android/AnyKernel3"
-DEFCONFIG="${DEVICE}_defconfig"
-
-OUT_DIR="$(pwd)/out"
-BOOT_DIR="$OUT_DIR/arch/arm64/boot"
-DTS_DIR="$BOOT_DIR/dts"
-
-if test -z "$(git rev-parse --show-cdup 2>/dev/null)" &&
-   head=$(git rev-parse --verify HEAD 2>/dev/null); then
-    ZIPNAME="${ZIPNAME::-4}-$(echo $head | cut -c1-8).zip"
-fi
-
 export PATH="$TC_DIR/bin:$PATH"
 
-if ! [ -d "$TC_DIR" ]; then
-    echo -e "${YELLOW}AOSP clang not found! Cloning to $TC_DIR...${NC}"
-    if ! git clone --depth=1 -b 18 https://gitlab.com/ThankYouMario/android_prebuilts_clang-standalone "$TC_DIR"; then
-        echo -e "${RED}Cloning failed! Aborting...${NC}"
-        exit 1
-    fi
-fi
+# ===== AnyKernel3 =====
+AK3_REPO="https://github.com/Sanders-Revived/AnyKernel3"
+AK3_BRANCH="sanders"
+AK3_DIR="$(pwd)/android/AnyKernel3"
 
-if [[ $ARGUMENT = "-r" || $ARGUMENT = "--regen" ]]; then
-    mkdir -p out
-    make O=out ARCH=arm64 $DEFCONFIG savedefconfig
-    cp out/defconfig arch/arm64/configs/$DEFCONFIG
-    echo -e "\n${GREEN}Defconfig successfully regenerated at $DEFCONFIG${NC}"
-    exit 0
-fi
+# ===== Output =====
+OUT_DIR="$(pwd)/out"
+BOOT_DIR="$OUT_DIR/arch/arm64/boot"
+KERNEL_IMG="$BOOT_DIR/Image.gz"
 
-if [[ $ARGUMENT = "-rf" || $ARGUMENT = "--regen-full" ]]; then
-    mkdir -p out
-    make O=out ARCH=arm64 $DEFCONFIG
-    cp out/.config arch/arm64/configs/$DEFCONFIG
-    echo -e "\n${GREEN}Full defconfig successfully regenerated at $DEFCONFIG${NC}"
-    exit 0
+# ===== Zip =====
+ZIPNAME="Aurora-Kernel-${DEVICE}-$(date '+%Y%m%d-%H%M')"
+if test -z "$(git rev-parse --show-cdup 2>/dev/null)" &&
+   head=$(git rev-parse --verify HEAD 2>/dev/null); then
+    ZIPNAME="${ZIPNAME}-$(echo "$head" | cut -c1-8)"
 fi
+ZIPNAME="${ZIPNAME}.zip"
 
-if [[ $ARGUMENT = "-c" || $ARGUMENT = "--clean" ]]; then
-    echo -e "${YELLOW}Cleaning output directory...${NC}"
+# ===== Arguments =====
+ARG=$1
+
+if [[ "$ARG" == "-c" || "$ARG" == "--clean" ]]; then
+    echo "[*] Cleaning output directory"
     rm -rf out
 fi
 
-if [[ $ARGUMENT = "-z" || $ARGUMENT = "--zip" ]]; then
-    GEN_ZIP=true
-else
-    GEN_ZIP=false
+if [[ "$ARG" == "-r" || "$ARG" == "--regen" ]]; then
+    mkdir -p out
+    make O=out ARCH=arm64 $DEFCONFIG savedefconfig
+    cp out/defconfig arch/arm64/configs/$DEFCONFIG
+    echo "[+] Defconfig regenerated"
+    exit 0
 fi
 
+if [[ "$ARG" == "-rf" || "$ARG" == "--regen-full" ]]; then
+    mkdir -p out
+    make O=out ARCH=arm64 $DEFCONFIG
+    cp out/.config arch/arm64/configs/$DEFCONFIG
+    echo "[+] Full defconfig regenerated"
+    exit 0
+fi
+
+# ===== Toolchain check =====
+if ! [ -d "$TC_DIR" ]; then
+    echo "[*] Cloning AOSP clang..."
+    git clone --depth=1 -b 18 \
+        https://gitlab.com/ThankYouMario/android_prebuilts_clang-standalone \
+        "$TC_DIR" || exit 1
+fi
+
+# ===== Build =====
 mkdir -p out
-echo -e "${YELLOW}Building defconfig: $DEFCONFIG${NC}"
+echo "[*] Building $DEFCONFIG for $DEVICE_NAME"
 make O=out ARCH=arm64 $DEFCONFIG
 
-echo -e "\n${YELLOW}Starting compilation...${NC}\n"
-
+echo "[*] Starting compilation..."
 make -j$(nproc --all) O=out ARCH=arm64 \
     CC=clang LD=ld.lld AS=llvm-as AR=llvm-ar NM=llvm-nm \
     OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip \
-    CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
-    LLVM=1 LLVM_IAS=1 Image.gz dtbs
+    CROSS_COMPILE=aarch64-linux-gnu- \
+    CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
+    LLVM=1 LLVM_IAS=1 Image.gz
 
-if [ -f "$BOOT_DIR/Image.gz" ]; then
-    echo -e "${GREEN}Kernel Image.gz found!${NC}"
-    
-    if [ -d "$DTS_DIR" ]; then
-        echo -e "${BLUE}Generating dtb.img from $DTS_DIR...${NC}"
-        cat $(find "$DTS_DIR" -type f -name "*.dtb" | sort) > "$BOOT_DIR/dtb.img"
-        
-        if [ -f "$BOOT_DIR/dtb.img" ]; then
-            echo -e "${GREEN}dtb.img generated successfully!${NC}"
-        else
-            echo -e "${RED}Failed to generate dtb.img! Check if dtbs were compiled.${NC}"
-            exit 1
-        fi
-    else
-        echo -e "${RED}DTS directory not found. Compilation might be incomplete.${NC}"
-        exit 1
-    fi
-else
-    echo -e "\n${RED}Compilation failed! Image.gz not found.${NC}"
+# ===== Check compilation =====
+if ! [ -f "$KERNEL_IMG" ]; then
+    echo "[!] Compilation failed – Image.gz not found"
     exit 1
 fi
 
-if [ "$GEN_ZIP" = true ]; then
-    echo -e "Preparing zip...\n"
-    
-    rm -rf AnyKernel3
+echo "[+] Kernel compiled successfully"
 
-    if [ -d "$AK3_DIR" ]; then
-        echo "Copying local AnyKernel3..."
-        cp -r $AK3_DIR AnyKernel3
-    else
-        echo "Cloning AnyKernel3 (Branch: $AK3_BRANCH)..."
-        if ! git clone -q https://github.com/Bomb-Projects/AnyKernel3 -b $AK3_BRANCH; then
-            echo -e "\n${RED}Failed to clone branch '$AK3_BRANCH'! Trying default branch...${NC}"
-            if ! git clone -q https://github.com/Bomb-Projects/AnyKernel3; then
-                    echo -e "${RED}AnyKernel3 clone failed! Aborting...${NC}"
-                    exit 1
-            fi
-        fi
-    fi
+# ===== Prepare AnyKernel3 =====
+rm -rf AnyKernel3
+echo "[*] Cloning AnyKernel3 for $DEVICE"
+git clone -q -b "$AK3_BRANCH" "$AK3_REPO" AnyKernel3 || exit 1
 
-    cp "$BOOT_DIR/Image.gz" AnyKernel3/Image.gz
-    cp "$BOOT_DIR/dtb.img" AnyKernel3/dtb.img
+# Copy the kernel image to AnyKernel3
+cp "$KERNEL_IMG" AnyKernel3
 
-    cd AnyKernel3
-    if [ -d ".git" ]; then
-        git checkout $AK3_BRANCH &> /dev/null
-    fi
+# Remove boot output folder (Supra style)
+rm -rf out/arch/arm64/boot
 
-    zip -r9 "../$ZIPNAME" * -x .git README.md *placeholder
-    cd ..
-    rm -rf AnyKernel3
-    
-    echo -e "\n${GREEN}Completed in $((SECONDS / 60)) minute(s) and $((SECONDS % 60)) second(s)!${NC}"
-    echo -e "${GREEN}Zip: $ZIPNAME${NC}"
-else
+# ===== Zip =====
+cd AnyKernel3 || exit 1
+zip -r9 "../$ZIPNAME" * -x .git README.md "*placeholder*"
+cd ..
+rm -rf AnyKernel3
 
-    echo -e "\n${YELLOW}Zip creation skipped (default). Use -z or --zip to generate.${NC}"
-    echo -e "Completed in $((SECONDS / 60)) minute(s) and $((SECONDS % 60)) second(s)!"
-fi
+echo
+echo "[✓] Done in $((SECONDS / 60))m $((SECONDS % 60))s"
+echo "[✓] Zip: $ZIPNAME"
