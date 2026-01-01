@@ -1,0 +1,55 @@
+name: Aurora-Kernel
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    env:
+      DEVICE: sanders
+      DEVICE_NAME: Moto G5s Plus
+      KERNEL_NAME: Aurora Kernel
+
+    steps:
+      - name: Check Out
+        uses: actions/checkout@v3
+
+      - name: Set Timezone
+        uses: szenius/set-timezone@v1.2
+        with:
+          timezoneLinux: "America/Sao_Paulo"
+
+      - name: Setting up the environment
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+
+      - name: Set Build Start Time
+        run: echo "START_TIME=$(date +%s)" >> $GITHUB_ENV
+
+      - name: Run build script
+        run: |
+          ./build.sh sanders
+
+      - name: Set Build End Time
+        run: echo "END_TIME=$(date +%s)" >> $GITHUB_ENV
+
+      - name: Calculate Build Duration
+        run: |
+          duration=$((END_TIME - START_TIME))
+          minutes=$((duration / 60))
+          seconds=$((duration % 60))
+          echo "BUILD_DURATION=${minutes}m ${seconds}s" >> $GITHUB_ENV
+
+      - name: Upload to Telegram
+        uses: appleboy/telegram-action@master
+        with:
+          to: ${{ secrets.TELEGRAM_CHAT_ID }}
+          token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          document: Aurora-Kernel-sanders*.zip
+          message: |
+            🌌 New Aurora Kernel build available!
+            📱 Device: Moto G5s Plus (sanders)
+            ⏱ Build time: ${{ env.BUILD_DURATION }}
