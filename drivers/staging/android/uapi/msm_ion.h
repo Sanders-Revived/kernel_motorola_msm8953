@@ -100,6 +100,22 @@ enum ion_heap_ids {
 
 #define ION_IOC_MSM_MAGIC 'M'
 
+/* struct ion_flush_data - data passed to ion for flushing caches */
+struct ion_flush_data {
+	__s32 handle;
+	__s32 fd;
+	__u64 vaddr;
+	__u32 offset;
+	__u32 length;
+};
+
+#define ION_IOC_CLEAN_CACHES	_IOWR(ION_IOC_MSM_MAGIC, 0, \
+					struct ion_flush_data)
+#define ION_IOC_INV_CACHES	_IOWR(ION_IOC_MSM_MAGIC, 1, \
+					struct ion_flush_data)
+#define ION_IOC_CLEAN_INV_CACHES	_IOWR(ION_IOC_MSM_MAGIC, 2, \
+					struct ion_flush_data)
+
 struct ion_prefetch_regions {
 	__u64 sizes;
 	__u32 vmid;
