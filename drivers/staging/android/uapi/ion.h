@@ -72,6 +72,19 @@ struct ion_allocation_data {
 	__u32 unused;
 };
 
+/**
+ * struct ion_custom_data - metadata passed to a legacy custom ioctl
+ * @cmd:        the custom ioctl function to call
+ * @arg:        additional data passed to the custom ioctl
+ *
+ * This ABI is kept for legacy 32-bit Qualcomm userspace, including the
+ * camera HAL shipped on Sanders.
+ */
+struct ion_custom_data {
+	__u32 cmd;
+	unsigned long arg;
+};
+
 #define MAX_HEAP_NAME			32
 
 /**
@@ -112,6 +125,11 @@ struct ion_heap_query {
  */
 #define ION_IOC_ALLOC		_IOWR(ION_IOC_MAGIC, 0, \
 				      struct ion_allocation_data)
+/**
+ * ION_IOC_CUSTOM - call a legacy architecture-specific ION ioctl
+ */
+#define ION_IOC_CUSTOM _IOWR(ION_IOC_MAGIC, 6, struct ion_custom_data)
+
 /**
  * DOC: ION_IOC_HEAP_QUERY - information about available heaps
  *
