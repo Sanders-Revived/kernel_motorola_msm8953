@@ -4,6 +4,7 @@
  */
 
 #include <linux/kernel.h>
+#include <linux/dma-buf.h>
 #include <linux/file.h>
 #include <linux/fs.h>
 #include <linux/uaccess.h>
@@ -19,6 +20,8 @@ union ion_ioctl_arg {
 	struct ion_allocation_data allocation;
 	struct ion_heap_query query;
 	struct ion_prefetch_data prefetch_data;
+	struct ion_flush_data flush_data;
+	struct ion_custom_data custom;
 #ifdef CONFIG_ION_LEGACY
 	struct ion_fd_data fd;
 	struct ion_old_allocation_data old_allocation;
@@ -50,6 +53,8 @@ static unsigned int ion_ioctl_dir(unsigned int cmd)
 	case ION_IOC_FREE:
 		return _IOC_WRITE;
 #endif
+	case ION_IOC_CUSTOM:
+		return _IOC_WRITE;
 	default:
 		return _IOC_DIR(cmd);
 	}
@@ -101,6 +106,46 @@ long ion_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 	case ION_IOC_HEAP_QUERY:
 		ret = ion_query_heaps(&data.query);
 		break;
+	case ION_IOC_CLEAN_CACHES:
+	case ION_IOC_INV_CACHES:
+	case ION_IOC_CLEAN_INV_CACHES:
+	{
+		struct dma_buf *dmabuf;
+
+		dmabuf = dma_buf_get(data.flush_data.fd);
+		if (IS_ERR(dmabuf))
+			return PTR_ERR(dmabuf);
+
+		switch (cmd) {
+		case ION_IOC_CLEAN_CACHES:
+			ret = dma_buf_end_cpu_access_partial(dmabuf,
+							     DMA_TO_DEVICE,
+							     data.flush_data.offset,
+							     data.flush_data.length);
+			break;
+		case ION_IOC_INV_CACHES:
+			ret = dma_buf_begin_cpu_access_partial(dmabuf,
+							       DMA_FROM_DEVICE,
+							       data.flush_data.offset,
+							       data.flush_data.length);
+			break;
+		case ION_IOC_CLEAN_INV_CACHES:
+			ret = dma_buf_end_cpu_access_partial(dmabuf,
+							     DMA_TO_DEVICE,
+							     data.flush_data.offset,
+							     data.flush_data.length);
+			if (!ret)
+				ret = dma_buf_begin_cpu_access_partial(dmabuf,
+								       DMA_FROM_DEVICE,
+								       data.flush_data.offset,
+								       data.flush_data.length);
+			break;
+		}
+		dma_buf_put(dmabuf);
+		break;
+	}
+	case ION_IOC_CUSTOM:
+		return ion_ioctl(filp, data.custom.cmd, data.custom.arg);
 	case ION_IOC_PREFETCH:
 	{
 		int ret;
