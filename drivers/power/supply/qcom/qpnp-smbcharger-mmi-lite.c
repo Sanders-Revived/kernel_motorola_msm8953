@@ -4888,6 +4888,8 @@ static int force_9v_hvdcp(struct smbchg_chip *chip)
 			HVDCP_ADAPTER_SEL_MASK, HVDCP_9V);
 	if (rc)
 		pr_err("Couldn't set hvdcp config in chgpath_chg rc=%d\n", rc);
+	else
+		msleep(1500);
 
 	return rc;
 }
