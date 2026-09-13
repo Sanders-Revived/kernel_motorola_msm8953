@@ -1,0 +1,24 @@
+&soc {
+	qcom,msm-thermal {
+		qcom,config-info = "sanders";
+	};
+
+	sys_temp_support {
+		compatible = "mmi,sys-temp";
+		mmi,temperature-names = "front_temp",
+					"back_temp";
+		status = "ok";
+	};
+};
+
+&pm8953_vadc {
+	chan@11 {
+		label = "board_id";
+		qcom,scale-function = <0>;
+		/delete-property/ qcom,vadc-thermal-node;
+	};
+
+	chan@13 {
+		label = "msm_therm";
+	};
+};

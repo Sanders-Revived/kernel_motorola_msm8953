@@ -3,3 +3,10 @@ config NO_TECHPACK_AUDIO
 
 source "techpack/camera-legacy/Kconfig"
 source "techpack/camera-legacy-n/Kconfig"
+
+config MACH_MOTOROLA_MSM8953
+	bool "Support for Motorola MSM8953 platform"
+
+config MACH_MOTOROLA_SANDERS
+	bool "Motorola Moto G5S Plus (sanders)"
+	depends on MACH_MOTOROLA_MSM8953

@@ -534,6 +534,15 @@ sdm632-qrd-overlay.dtbo-base := sdm632.dtb \
 	sdm632-pm8004.dtb
 
 else
+ifeq ($(CONFIG_MACH_MOTOROLA_MSM8953),y)
+# Add 1k of padding to the DTBs to allow for environment variables
+# to be runtime added by the bootloader (i.e. /chosen properties)
+DTC_FLAGS += -p 1024
+
+dtb-$(CONFIG_MACH_MOTOROLA_SANDERS) += msm8953-sanders-p1.dtb
+dtb-$(CONFIG_MACH_MOTOROLA_SANDERS) += msm8953-sanders-p2.dtb
+dtb-$(CONFIG_MACH_MOTOROLA_SANDERS) += msm8953-sanders-p3.dtb
+dtb-$(CONFIG_MACH_MOTOROLA_SANDERS) += msm8953-sanders-p4.dtb
 else
 dtb-$(CONFIG_ARCH_MSM8953) += msm8953-cdp.dtb \
 	msm8953-mtp.dtb \

@@ -1,0 +1,17 @@
+&msm_gpu {
+	qcom,disable-wake-on-touch;
+};
+
+&soc {
+	restart@4ab000 {
+		qcom,force-warm-reboot;
+	};
+
+	qcom,lpm-levels {
+		qcom,use-psci;
+	};
+};
+
+&qcom_seecom {
+	qcom,appsbl-qseecom-support;
+};

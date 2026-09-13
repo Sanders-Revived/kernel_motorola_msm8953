@@ -1,0 +1,45 @@
+/* Copyright (c) 2016, Motorola Mobility Inc. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+/* Moto */
+
+#include "../msm8953.dtsi"
+
+#include "../pmi8950.dtsi"
+
+#include "../msm8953-pinctrl.dtsi"
+
+/* Custom */
+
+#include "android.dtsi"
+#include "audio.dtsi"
+#include "battery.dtsi"
+#include "bus.dtsi"
+#include "camera.dtsi"
+#include "carrier-channel-ids.dtsi"
+#include "display.dtsi"
+#include "fingerprint.dtsi"
+#include "include/moto-mem-reserve.h"
+#include "misc.dtsi"
+#include "nfc.dtsi"
+#include "pinctrl.dtsi"
+#include "pm8953.dtsi"
+#include "pmi8950.dtsi"
+#include "regulator.dtsi"
+#include "reserved-memory.dtsi"
+#include "sensor.dtsi"
+#include "soc.dtsi"
+#include "storage.dtsi"
+#include "touchscreen.dtsi"
+#include "thermal.dtsi"
+#include "usb.dtsi"
+#include "vibrator.dtsi"
