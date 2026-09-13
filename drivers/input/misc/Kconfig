@@ -531,6 +531,13 @@ config INPUT_TWL6040_VIBRA
 	  To compile this driver as a module, choose M here. The module will
 	  be called twl6040_vibra.
 
+config SENSORS_FPC_1020
+	tristate "FPC1020 fingerprint sensor (moto sanders)"
+	depends on SPI_MASTER
+	help
+	  Say Y or M here for the FPC1020 SPI fingerprint sensor
+	  found on the Motorola Moto G5S Plus (sanders).
+
 config INPUT_UINPUT
 	tristate "User level driver support"
 	help
