@@ -1,0 +1,83 @@
+#include "dsi-panel-mot-tianma-550-1080p-vid.dtsi"
+#include "dsi-panel-mot-djn-550-1080p-vid.dtsi"
+
+&mdss_dsi0_pll {
+	/delete-property/ qcom,dsi-pll-ssc-en;
+	/delete-property/ qcom,dsi-pll-ssc-mode;
+};
+
+&mdss_dsi1_pll {
+	/delete-property/ qcom,dsi-pll-ssc-en;
+	/delete-property/ qcom,dsi-pll-ssc-mode;
+};
+
+&dsi_panel_pwr_supply {
+	qcom,panel-supply-entry@2 {
+		reg = <2>;
+		qcom,supply-name = "lab";
+		qcom,supply-min-voltage = <5500000>;
+		qcom,supply-max-voltage = <5500000>;
+		qcom,supply-enable-load = <100000>;
+		qcom,supply-disable-load = <100>;
+	};
+
+	qcom,panel-supply-entry@3 {
+		reg = <3>;
+		qcom,supply-name = "ibb";
+		qcom,supply-min-voltage = <5500000>;
+		qcom,supply-max-voltage = <5500000>;
+		qcom,supply-enable-load = <100000>;
+		qcom,supply-disable-load = <100>;
+		qcom,supply-post-on-sleep = <10>;
+	};
+};
+
+&mot_tianma_550_1080p_vid_v0 {
+	qcom,mdss-dsi-panel-timings-phy-v2 =
+		[23 1F 07 09 05 03 04 A0
+		 23 1F 07 09 05 03 04 A0
+		 23 1F 07 09 05 03 04 A0
+		 23 1F 07 09 05 03 04 A0
+		 23 1A 07 08 05 03 04 A0];
+};
+
+&mot_djn_550_1080p_vid_v0 {
+	qcom,mdss-dsi-panel-timings-phy-v2 =
+		[24 1F 08 09 05 03 04 A0
+		 24 1F 08 09 05 03 04 A0
+		 24 1F 08 09 05 03 04 A0
+		 24 1F 08 09 05 03 04 A0
+		 24 1C 08 09 05 03 04 A0];
+};
+
+&mdss_mdp {
+	qcom,mdss-pref-prim-intf = "dsi";
+};
+
+&mdss_dsi0 {
+	qcom,display-id = "primary";
+	qcom,dsi-pref-prim-pan = <&mot_tianma_550_1080p_vid_v0>;
+	pinctrl-names = "mdss_default", "mdss_sleep";
+	pinctrl-0 = <&mdss_dsi_active>;
+	pinctrl-1 = <&mdss_dsi_suspend>;
+
+	/delete-property/ vdd-supply;
+	vddio_disp-supply = <&pm8953_l6>;
+	vsp_disp-supply = <&lab_regulator>;
+	vsn_disp-supply = <&ibb_regulator>;
+
+	qcom,platform-reset-gpio = <&tlmm 61 0>;
+};
+
+&mdss_dsi1 {
+	status = "disabled";
+};
+
+&labibb {
+	status = "ok";
+	qpnp,qpnp-labibb-mode = "lcd";
+};
+
+&ibb_regulator {
+	qcom,qpnp-ibb-discharge-resistor = <32>;
+};

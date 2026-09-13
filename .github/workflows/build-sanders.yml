@@ -7,11 +7,17 @@ on:
     paths:
       - arch/arm64/configs/vendor/sanders.config
       - arch/arm64/boot/dts/qcom/Makefile
+      - arch/arm64/boot/dts/qcom/*sanders*
+      - arch/arm64/boot/dts/qcom/dsi-panel-mot-*
+      - arch/arm64/configs/sanders*_defconfig
       - .github/workflows/build-sanders.yml
   pull_request:
     paths:
       - arch/arm64/configs/vendor/sanders.config
       - arch/arm64/boot/dts/qcom/Makefile
+      - arch/arm64/boot/dts/qcom/*sanders*
+      - arch/arm64/boot/dts/qcom/dsi-panel-mot-*
+      - arch/arm64/configs/sanders*_defconfig
       - .github/workflows/build-sanders.yml
   workflow_dispatch:
 
@@ -22,20 +28,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: overlay sanders device tree
-        uses: actions/checkout@v4
-        with:
-          repository: sanders-abuse/kernel_devicetree_msm-4.19
-          ref: sanders
-          sparse-checkout: qcom
-          sparse-checkout-cone-mode: false
-          path: dt-overlay
-
       - name: install dependencies
         run: |
           sudo apt-get update -yqq
           sudo apt-get install -yqq bc bison device-tree-compiler flex \
-            gcc-aarch64-linux-gnu libssl-dev make python3
+            gcc-aarch64-linux-gnu libssl-dev lz4 make python3
 
       - name: defconfig
         run: |
@@ -47,7 +44,6 @@ jobs:
 
       - name: build image and dtbs
         run: |
-          cp dt-overlay/qcom/*.dts* arch/arm64/boot/dts/qcom/
           make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- \
             -j$(nproc) Image.gz
           make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- \
@@ -59,6 +55,26 @@ jobs:
       - name: verify sanders dtbs
         run: |
           ls -la arch/arm64/boot/dts/qcom/msm8953-motorola-sanders-p?.dtb
+
+      - name: build qcdt image
+        run: |
+          git clone --depth 1 --branch lineage-18.1 \
+            https://github.com/LineageOS/android_system_tools_dtbtool.git dtbtool
+          gcc -O2 -o dtbToolLineage dtbtool/dtbtool.c
+          mkdir sanders-dtbs
+          cp arch/arm64/boot/dts/qcom/msm8953-motorola-sanders-p?.dtb \
+            sanders-dtbs/
+          ./dtbToolLineage -o dt.img -s 2048 -p "$PWD/scripts/dtc/" \
+            sanders-dtbs/
+          lz4 -9 -f dt.img dt.img.lz4
+          test "$(od -An -tx1 -N4 dt.img | tr -d ' \n')" = "51434454"
+
+      - name: upload qcdt image
+        uses: actions/upload-artifact@v4
+        with:
+          name: sanders-419-qcdt
+          path: dt.img.lz4
+          if-no-files-found: error
 
       - name: upload image
         uses: actions/upload-artifact@v4
