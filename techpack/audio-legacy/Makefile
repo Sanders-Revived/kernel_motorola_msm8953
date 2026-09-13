@@ -1,3 +1,4 @@
+ifneq ($(CONFIG_NO_TECHPACK_AUDIO),y)
 # auto-detect subdirs
 ifeq ($(CONFIG_ARCH_SDM450), y)
 include $(srctree)/techpack/audio-legacy/config/sdm450auto.conf
@@ -46,3 +47,6 @@ obj-y += soc/
 obj-y += dsp/
 obj-y += ipc/
 obj-y += asoc/
+else
+obj-y := stub.o
+endif

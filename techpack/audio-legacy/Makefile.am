@@ -1,3 +1,4 @@
+ifneq ($(CONFIG_NO_TECHPACK_AUDIO),y)
 AUDIO_ROOT=$(PWD)
 UAPI_OUT=$(PWD)
 HEADER_INSTALL_DIR=$(KERNEL_SRC)/scripts
@@ -98,3 +99,4 @@ modules_install:
 clean:
 	rm -f *.o *.ko *.mod.c *.mod.o *~ .*.cmd Module.symvers
 	rm -rf .tmp_versions
+endif
