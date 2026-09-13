@@ -1,5 +1,5 @@
-#include "dsi-panel-mot-tianma-550-1080p-vid.dtsi"
-#include "dsi-panel-mot-djn-550-1080p-vid.dtsi"
+#include "dsi-panel/dsi-panel-mot-tianma-550-1080p-vid.dtsi"
+#include "dsi-panel/dsi-panel-mot-djn-550-1080p-vid.dtsi"
 
 &mdss_dsi0_pll {
 	/delete-property/ qcom,dsi-pll-ssc-en;

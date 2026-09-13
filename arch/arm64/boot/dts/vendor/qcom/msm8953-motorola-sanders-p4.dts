@@ -1,19 +1,34 @@
+/* Copyright (c) 2016, Motorola Mobility Inc. All rights reserved. */
+
 /dts-v1/;
 
-#include "msm8953.dtsi"
-#include "pmi8950.dtsi"
-#include "msm8953-pmi8950.dtsi"
-#include "msm8953-qrd-sku3.dtsi"
-#include "msm8953-mdss-panels.dtsi"
-#include "msm8953-oc-gpu.dtsi"
-
-#include "mi8953/common/common.dtsi"
-#include "mi8953/sanders/sanders.dtsi"
+#include "arm64/qcom/msm8953.dtsi"
+#include "arm64/qcom/pmi8950.dtsi"
+#include "arm64/qcom/msm8953-pmi8950.dtsi"
+#include "arm64/qcom/msm8953-qrd-sku3.dtsi"
+#include "arm64/qcom/msm8953-mdss-panels.dtsi"
+#include "sanders/msm8953-sanders-display.dtsi"
+#include "sanders/msm8953-sanders-battery.dtsi"
+#include "sanders/msm8953-sanders-pmic.dtsi"
+#include "sanders/msm8953-sanders-regulator.dtsi"
+#include "sanders/msm8953-sanders-sdhc.dtsi"
+#include "sanders/msm8953-sanders-pinctrl.dtsi"
+#include "sanders/msm8953-sanders-fps.dtsi"
+#include "sanders/msm8953-sanders-touch.dtsi"
+#include "sanders/msm8953-sanders-usb.dtsi"
+#include "sanders/msm8953-sanders-misc.dtsi"
+#include "sanders/msm8953-sanders-sensor.dtsi"
+#include "sanders/msm8953-sanders-vibrator.dtsi"
+#include "sanders/msm8953-sanders-soc.dtsi"
+#include "sanders/msm8953-sanders-android.dtsi"
+#include "sanders/msm8953-sanders-nfc.dtsi"
+#include "sanders/msm8953-sanders-camera.dtsi"
+#include "sanders/msm8953-sanders-audio.dtsi"
+#include "sanders/msm8953-sanders-carrier.dtsi"
 
 / {
 	model = "Motorola Moto G5S Plus";
-	compatible = "qcom,msm8953-sanders", "qcom,msm8953",
-		"motorola,sanders";
-	qcom,msm-id = <0x125 0x0>;
-	qcom,board-id = <0x4B 0x8400>, <0x4C 0x8400>;
+	compatible = "qcom,msm8953-sanders", "qcom,msm8953-moto",
+		"qcom,msm8953";
+	qcom,board-id = <0x4B 0x8400>,<0x4C 0x8400>;
 };

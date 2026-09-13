@@ -1,23 +1,26 @@
+/*These nodes are not used and cause pin conflicts*/
+/delete-node/ &wsa881x_i2c_45;
+/delete-node/ &wsa881x_i2c_f;
+/delete-node/ &wsa881x_analog_clk_gpio;
+/delete-node/ &wsa881x_analog_reset_gpio;
+
+&int_codec {
+	/delete-property/ qcom,cdc-us-eu-gpios;
+};
+
 &soc {
 	alsa_to_h2w {
 		compatible = "mmi,alsa-to-h2w";
 	};
 
 	/delete-node/ sound-9335;
+	/delete-node/ msm_cdc_pinctrl_us_euro_sw;
 
 	dummy_vreg: dummy_vreg {
 		compatible = "regulator-fixed";
 		status = "ok";
 		regulator-name = "dummy_vreg";
 		regulator-always-on;
-	};
-
-	ospl {
-		compatible = "mmi,ospl2xx";
-		status = "ok";
-		mmi,ospl-tune-index = <0 1 2 3>;
-		mmi,ospl-afe-port-id = <0x1016 0x1017>;
-		mmi,ospl-left-feedback;
 	};
 
 	sound {

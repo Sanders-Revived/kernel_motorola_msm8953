@@ -7,16 +7,18 @@ on:
     paths:
       - arch/arm64/configs/vendor/sanders.config
       - arch/arm64/boot/dts/qcom/Makefile
-      - arch/arm64/boot/dts/qcom/*sanders*
-      - arch/arm64/boot/dts/qcom/dsi-panel-mot-*
+      - arch/arm64/boot/dts/vendor/qcom/sanders/**
+      - arch/arm64/boot/dts/vendor/qcom/msm8953-motorola-sanders-*.dts
+      - arch/arm64/boot/dts/vendor/qcom/Makefile
       - arch/arm64/configs/sanders*_defconfig
       - .github/workflows/build-sanders.yml
   pull_request:
     paths:
       - arch/arm64/configs/vendor/sanders.config
       - arch/arm64/boot/dts/qcom/Makefile
-      - arch/arm64/boot/dts/qcom/*sanders*
-      - arch/arm64/boot/dts/qcom/dsi-panel-mot-*
+      - arch/arm64/boot/dts/vendor/qcom/sanders/**
+      - arch/arm64/boot/dts/vendor/qcom/msm8953-motorola-sanders-*.dts
+      - arch/arm64/boot/dts/vendor/qcom/Makefile
       - arch/arm64/configs/sanders*_defconfig
       - .github/workflows/build-sanders.yml
   workflow_dispatch:
@@ -76,7 +78,7 @@ jobs:
 
       - name: verify sanders dtbs
         run: |
-          ls -la arch/arm64/boot/dts/qcom/msm8953-motorola-sanders-p?.dtb
+          ls -la arch/arm64/boot/dts/vendor/qcom/msm8953-motorola-sanders-p?.dtb
 
       - name: build qcdt image
         run: |
@@ -117,5 +119,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: sanders-419-dtbs
-          path: arch/arm64/boot/dts/qcom/msm8953-motorola-sanders-p?.dtb
+          path: arch/arm64/boot/dts/vendor/qcom/msm8953-motorola-sanders-p?.dtb
           if-no-files-found: error

@@ -2,8 +2,8 @@
 	mot_batterydata: qcom,battery-data {
 		qcom,batt-id-range-pct = <100>;
 		df-serialnum = "SB18C15119";
-		#include "batterydata-hg30-atl.dtsi"
-		#include "batterydata-hg30-swd.dtsi"
+		#include "batterydata/batterydata-hg30-atl.dtsi"
+		#include "batterydata/batterydata-hg30-swd.dtsi"
 	};
 };
 
