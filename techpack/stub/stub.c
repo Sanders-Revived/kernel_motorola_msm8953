@@ -10,6 +10,19 @@ static void _techpack_stub(void)
 
 #include <linux/kconfig.h>
 
+#include <linux/err.h>
+#include <linux/of.h>
+
+struct drm_panel;
+
+#if !IS_ENABLED(CONFIG_DRM_PANEL)
+struct drm_panel *of_drm_find_panel(const struct device_node *np)
+{
+	(void)np;
+	return ERR_PTR(-ENODEV);
+}
+#endif
+
 #if !IS_ENABLED(CONFIG_MSMB_CAMERA) && \
 	!IS_ENABLED(CONFIG_MSMB_CAMERA_LEGACY) && \
 	!IS_ENABLED(CONFIG_MSMB_CAMERA_LEGACY_N)
