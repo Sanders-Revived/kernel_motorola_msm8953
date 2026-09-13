@@ -71,6 +71,12 @@ struct fts_ts_data *fts_data;
 static struct drm_panel *active_panel;
 #endif
 
+#if !defined(CONFIG_DRM)
+struct drm_panel;
+struct drm_panel *of_drm_find_panel(const struct device_node *np);
+static struct drm_panel *active_panel;
+#endif
+
 /*****************************************************************************
 * Static function prototypes
 *****************************************************************************/
