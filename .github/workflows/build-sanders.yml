@@ -6,10 +6,12 @@ on:
       - sanders
     paths:
       - arch/arm64/configs/vendor/sanders.config
+      - arch/arm64/boot/dts/qcom/Makefile
       - .github/workflows/build-sanders.yml
   pull_request:
     paths:
       - arch/arm64/configs/vendor/sanders.config
+      - arch/arm64/boot/dts/qcom/Makefile
       - .github/workflows/build-sanders.yml
   workflow_dispatch:
 
@@ -47,7 +49,12 @@ jobs:
         run: |
           cp dt-overlay/qcom/*.dts* arch/arm64/boot/dts/qcom/
           make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- \
-            -j$(nproc) Image.gz dtbs
+            -j$(nproc) Image.gz
+          make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- \
+            qcom/msm8953-motorola-sanders-p1.dtb \
+            qcom/msm8953-motorola-sanders-p2.dtb \
+            qcom/msm8953-motorola-sanders-p3.dtb \
+            qcom/msm8953-motorola-sanders-p4.dtb
 
       - name: verify sanders dtbs
         run: |
