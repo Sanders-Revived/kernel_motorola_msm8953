@@ -38,9 +38,9 @@
 };
 
 &pm8953_vadc {
-	chan@11 {
+	pa_therm1 {
 		label = "chg_therm";
-		qcom,scale-function = <2>;
-		qcom,vadc-thermal-node;
+		qcom,scale-fn-type = <2>;
+		/delete-property/ qcom,iio-chan-type-override;
 	};
 };

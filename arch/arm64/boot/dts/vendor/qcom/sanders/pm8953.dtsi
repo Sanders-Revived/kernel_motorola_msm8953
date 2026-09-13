@@ -1,14 +1,14 @@
+#include <dt-bindings/pinctrl/qcom,pmic-gpio.h>
+
 &pm8953_gpios {
-	gpio@c100 { /* GPIO 2 */
-		status = "okay";
-		qcom,mode = <0>;        /* QPNP_PIN_MODE_DIG_OUT */
-		qcom,output-type = <0>; /* CMOS logic */
-		qcom,invert = <0>;      /* Output low initially */
-		qcom,pull = <5>;        /* QPNP_PIN_NO_PULL */
-		qcom,vin-sel = <2>;     /* QPNP_PIN_VIN2 */
-		qcom,out-strength = <3>;/* High */
-		qcom,src-sel = <0>;     /* QPNP_PIN_SEL_FUNC_CONSTANT */
-		qcom,master-en = <1>;   /* Enable this pin */
+	nfc_refclk_default: nfc-refclk-default {
+		pins = "gpio2";
+		function = "normal";
+		output-low;
+		bias-disable;
+		drive-push-pull;
+		qcom,drive-strength = <PMIC_GPIO_STRENGTH_HIGH>;
+		power-source = <2>;
 	};
 
 	gpio@c400 {

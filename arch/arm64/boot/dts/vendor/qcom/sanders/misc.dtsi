@@ -34,7 +34,7 @@
 		reg = <0x078b5000 0x600>,
 		<0x07884000 0x1f000>;
 		interrupt-names = "spi_irq", "spi_bam_irq";
-		interrupts = <0 95 0>, <0 238 0>;
+		interrupts = <0 95 IRQ_TYPE_LEVEL_HIGH>, <0 238 IRQ_TYPE_LEVEL_HIGH>;
 		spi-max-frequency = <50000000>;
 		pinctrl-names = "spi_default", "spi_sleep";
 		pinctrl-0 = <&spi_1_active &spi1_cs0_active>;

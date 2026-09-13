@@ -1,3 +1,5 @@
+#include <dt-bindings/pinctrl/qcom,pmic-mpp.h>
+
 &pmi8950_mpps {
 	mpp@a300 { /* MPP4 MOD_BPLUS_FAULT_N */
 		qcom,mode = <0>;	/* Digital input */
@@ -31,13 +33,13 @@
 };
 
 &pmi8950_mpps {
-	mpp@a000 {
-		/* Host detect */
-		status = "ok";
-		qcom,mode = <4>; /* AIN input */
-		qcom,ain-route = <0>; /* AMUX 5 */
-		qcom,master-en = <1>;
-		qcom,src-sel = <0>; /* Function constant */
+	host_det {
+		host_det_default: host_det_default {
+			pins = "mpp1";
+			function = "analog";
+			input-enable;
+			qcom,amux-route = <PMIC_MPP_AMUX_ROUTE_CH5>;
+		};
 	};
 
 	mpp@a200 {
@@ -52,15 +54,13 @@
 };
 
 &pmi8950_vadc {
-	chan@10 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&host_det_default>;
+
+	host_det {
 		label = "host_det";
-		reg = <0x10>;
-		qcom,decimation = <0>;
-		qcom,pre-div-channel-scaling = <1>;
-		qcom,calibration-type = "absolute";
-		qcom,scale-function = <0>;
-		qcom,hw-settle-time = <0>;
-		qcom,fast-avg-setup = <0>;
+		reg = <VADC_P_MUX1_1_1>;
+		qcom,pre-scaling = <1 3>;
 	};
 };
 

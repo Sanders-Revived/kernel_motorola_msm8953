@@ -1,3 +1,7 @@
+/ {
+	qcom,enable-legacy-adsp-hacks;
+};
+
 /*These nodes are not used and cause pin conflicts*/
 /delete-node/ &wsa881x_i2c_45;
 /delete-node/ &wsa881x_i2c_f;

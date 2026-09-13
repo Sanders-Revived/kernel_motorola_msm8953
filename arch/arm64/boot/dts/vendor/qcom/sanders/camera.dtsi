@@ -468,7 +468,7 @@
 		#address-cells = <1>;
 		#size-cells = <0>;
 		reg-names = "cci";
-		interrupts = <0 50 0>;
+		interrupts = <0 50 IRQ_TYPE_LEVEL_HIGH>;
 		interrupt-names = "cci";
 		clocks = <&clock_gcc clk_gcc_camss_ispif_ahb_clk>,
 			<&clock_gcc clk_cci_clk_src>,
