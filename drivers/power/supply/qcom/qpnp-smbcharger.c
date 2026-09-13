@@ -43,9 +43,7 @@
 #include <linux/ktime.h>
 #include <linux/extcon-provider.h>
 #include <linux/pmic-voter.h>
-#if IS_ENABLED(CONFIG_MACH_XIAOMI_MSM8953)
 #include <xiaomi-msm8953/mach.h>
-#endif
 #include <linux/iio/consumer.h>
 
 /* Mask/Bit helpers */

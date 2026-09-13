@@ -13,9 +13,7 @@
 #include "codecs/wsa881x-analog.h"
 #include <linux/regulator/consumer.h>
 #include <linux/regulator/driver.h>
-#if IS_ENABLED(CONFIG_MACH_XIAOMI_MSM8953)
 #include <xiaomi-msm8953/mach.h>
-#endif
 
 
 #define BTSCO_RATE_8KHZ 8000
@@ -39,6 +37,8 @@
 
 #if IS_ENABLED(CONFIG_MACH_XIAOMI_MIDO)
 #define EXT_PA_MODE  5
+#else
+#define EXT_PA_MODE  0
 #endif
 
 enum {
