@@ -869,9 +869,6 @@ CONFIG_PSTORE_PMSG=y
 #
 CONFIG_TOUCHSCREEN_FTS=y
 
-# xiaomi copy of the same driver would link twice against ours.
-# CONFIG_TOUCHSCREEN_FTS_MI8953 is not set
-
 # imren camera stacks are broken upstream (missing msm_isp.h and
 # msm_camera_tz_util.h); sanders camera needs fresh drivers anyway.
 # CONFIG_MSMB_CAMERA_LEGACY is not set
@@ -888,9 +885,39 @@ CONFIG_SENSORS_FPC_1020=m
 
 # audio avtimer is forced on by sdm450autoconf.h and its camera hook is
 # covered by a no-op stub in techpack/stub/stub.c until camera bring-up.
-# recovery: same base minus debug weight; the recovery partition
-# is ~21MB shared with the ramdisk. slim down further after size
-# measurement on real builds.
+
+# mi8953.config is shared with Xiaomi boards; none of these drivers belong to sanders.
+# CONFIG_MACH_XIAOMI_MSM8953 is not set
+# CONFIG_MACH_XIAOMI_ROSY is not set
+# CONFIG_MACH_XIAOMI_YSL is not set
+# CONFIG_MACH_XIAOMI_VINCE is not set
+# CONFIG_MACH_XIAOMI_MIDO is not set
+# CONFIG_MACH_XIAOMI_MARKW is not set
+# CONFIG_FINGERPRINT_FPC is not set
+# CONFIG_FINGERPRINT_FPC1020 is not set
+# CONFIG_FINGERPRINT_FPC1020_ROSY is not set
+# CONFIG_GOODIX_FINGERPRINT is not set
+# CONFIG_FINGERPRINT_GOODIX_GF3208 is not set
+# CONFIG_FINGERPRINT_GOODIX_GF3208_VINCE is not set
+# CONFIG_FINGERPRINT_GF3208_ROSY is not set
+# CONFIG_SPI_PEELIR is not set
+# CONFIG_IR_PWM_MI8953 is not set
+# CONFIG_LEDS_AW2013_MI8953 is not set
+# CONFIG_SND_SOC_TAS2557 is not set
+# CONFIG_TAS2557_REGMAP is not set
+# CONFIG_TAS2557_CODEC is not set
+# CONFIG_TAS2557_MISC is not set
+# CONFIG_TOUCHSCREEN_SYSCTL_MI8953 is not set
+# CONFIG_TOUCHSCREEN_DOUBLETAP2WAKE is not set
+# CONFIG_TOUCHSCREEN_SWEEP2WAKE is not set
+# CONFIG_TOUCHSCREEN_FTS_MI8953 is not set
+# CONFIG_TOUCHSCREEN_GT9XX is not set
+# CONFIG_TOUCHSCREEN_TD4310_E7 is not set
+# CONFIG_TOUCHSCREEN_TD4310_LANSI_E7 is not set
+# CONFIG_TOUCHSCREEN_NT36XXX is not set
+# CONFIG_TOUCHSCREEN_NT36XXX_I2C is not set
+# CONFIG_TOUCHSCREEN_IST3038C is not set
+# Recovery omits debug information to reduce image size.
 # CONFIG_DEBUG_INFO is not set
 # CONFIG_DEBUG_INFO_DWARF4 is not set
 # CONFIG_GDB_SCRIPTS is not set
