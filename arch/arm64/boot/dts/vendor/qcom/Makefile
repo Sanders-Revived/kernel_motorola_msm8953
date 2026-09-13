@@ -539,6 +539,12 @@ dtb-$(CONFIG_MACH_XIAOMI_ROSY) += rosy-titanium.dtb
 dtb-$(CONFIG_MACH_XIAOMI_VINCE) += vince-titanium.dtb
 dtb-$(CONFIG_MACH_XIAOMI_YSL) += ysl-titanium.dtb
 dtb-$(CONFIG_MACH_XIAOMI_MIDO) += mido-titanium.dtb
+ifeq ($(CONFIG_MACH_MOTOROLA_SANDERS),y)
+dtb-$(CONFIG_ARCH_MSM8953) += msm8953-motorola-sanders-p1.dtb \
+	msm8953-motorola-sanders-p2.dtb \
+	msm8953-motorola-sanders-p3.dtb \
+	msm8953-motorola-sanders-p4.dtb
+endif
 else
 dtb-$(CONFIG_ARCH_MSM8953) += msm8953-cdp.dtb \
 	msm8953-mtp.dtb \

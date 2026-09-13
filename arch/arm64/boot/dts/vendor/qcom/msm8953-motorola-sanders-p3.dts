@@ -1,0 +1,19 @@
+/dts-v1/;
+
+#include "msm8953.dtsi"
+#include "pmi8950.dtsi"
+#include "msm8953-pmi8950.dtsi"
+#include "msm8953-qrd-sku3.dtsi"
+#include "msm8953-mdss-panels.dtsi"
+#include "msm8953-oc-gpu.dtsi"
+
+#include "mi8953/common/common.dtsi"
+#include "mi8953/sanders/sanders.dtsi"
+
+/ {
+	model = "Motorola Moto G5S Plus";
+	compatible = "qcom,msm8953-sanders", "qcom,msm8953",
+		"motorola,sanders";
+	qcom,msm-id = <0x125 0x0>;
+	qcom,board-id = <0x4B 0x8300>, <0x4B 0x83B0>;
+};

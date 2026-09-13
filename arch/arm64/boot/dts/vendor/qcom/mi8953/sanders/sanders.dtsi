@@ -1,0 +1,4 @@
+#include "../common/pinctrl.dtsi"
+#include "display.dtsi"
+#include "pmic.dtsi"
+#include "battery.dtsi"

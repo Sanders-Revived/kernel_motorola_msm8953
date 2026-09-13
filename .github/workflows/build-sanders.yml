@@ -1,0 +1,68 @@
+name: build sanders 4.19
+
+on:
+  push:
+    branches:
+      - sanders
+    paths:
+      - arch/arm64/configs/vendor/sanders.config
+      - .github/workflows/build-sanders.yml
+  pull_request:
+    paths:
+      - arch/arm64/configs/vendor/sanders.config
+      - .github/workflows/build-sanders.yml
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: overlay sanders device tree
+        uses: actions/checkout@v4
+        with:
+          repository: sanders-abuse/kernel_devicetree_msm-4.19
+          ref: sanders
+          sparse-checkout: qcom
+          sparse-checkout-cone-mode: false
+          path: dt-overlay
+
+      - name: install dependencies
+        run: |
+          sudo apt-get update -yqq
+          sudo apt-get install -yqq bc bison device-tree-compiler flex \
+            gcc-aarch64-linux-gnu libssl-dev make python3
+
+      - name: defconfig
+        run: |
+          make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- vendor/msm8953-perf_defconfig
+          ./scripts/kconfig/merge_config.sh -m .config \
+            arch/arm64/configs/vendor/mi8953.config \
+            arch/arm64/configs/vendor/sanders.config
+          make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- olddefconfig
+
+      - name: build image and dtbs
+        run: |
+          cp dt-overlay/qcom/*.dts* arch/arm64/boot/dts/qcom/
+          make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- \
+            -j$(nproc) Image.gz dtbs
+
+      - name: verify sanders dtbs
+        run: |
+          ls -la arch/arm64/boot/dts/qcom/msm8953-motorola-sanders-p?.dtb
+
+      - name: upload image
+        uses: actions/upload-artifact@v4
+        with:
+          name: sanders-419-image
+          path: arch/arm64/boot/Image.gz
+          if-no-files-found: error
+
+      - name: upload sanders dtbs
+        uses: actions/upload-artifact@v4
+        with:
+          name: sanders-419-dtbs
+          path: arch/arm64/boot/dts/qcom/msm8953-motorola-sanders-p?.dtb
+          if-no-files-found: error
