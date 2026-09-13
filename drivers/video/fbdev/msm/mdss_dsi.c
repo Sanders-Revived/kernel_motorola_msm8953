@@ -44,9 +44,10 @@ static struct mdss_dsi_data *mdss_dsi_res;
 bool lcm_ffbm_mode = 0;
 #endif
 
-#if IS_ENABLED(CONFIG_MACH_XIAOMI_VINCE)
 struct mdss_dsi_ctrl_pdata *change_par_ctrl;
+static bool vspn_power_state;
 
+#if IS_ENABLED(CONFIG_MACH_XIAOMI_VINCE)
 static struct NVT_CSOT_ESD nvt_csot_esd = {
 	.nova_csot_panel = false,
 	.ESD_TE_status = false
@@ -56,7 +57,6 @@ struct NVT_CSOT_ESD *get_nvt_csot_esd_status(void){
 	return &nvt_csot_esd;
 }
 
-bool vspn_power_state = false;
 #endif
 
 static struct pm_qos_request mdss_dsi_pm_qos_request;
