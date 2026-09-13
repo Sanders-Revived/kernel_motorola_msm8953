@@ -9,5 +9,34 @@
 			ftrace-size = <0>;
 			pmsg-size = <0x800>;
 		};
+
+		tzlog_bck_mem: tzlog_bck_region {
+			no-map;
+			reg = <0x0 0xeefe4000 0x0 0x2000>;
+			label = "tzlog_bck_mem";
+		};
+
+		wdog_cpuctx_mem: wdog_cpuctx_region {
+			no-map;
+			reg = <0x0 0xeefe6000 0x0 0x1a000>;
+			label = "wdog_cpuctx_mem";
+		};
 	};
+};
+
+&other_ext_mem {
+	reg = <0x0 0x84300000 0x0 0x2500000>;
+};
+
+&qcom_seecom {
+	reg = <0x84300000 0x2000000>;
+};
+
+&qcom_tzlog {
+	linux,contiguous-region = <&tzlog_bck_mem>;
+};
+
+&wdog {
+	qcom,bark-time = <22000>;
+	linux,contiguous-region = <&wdog_cpuctx_mem>;
 };

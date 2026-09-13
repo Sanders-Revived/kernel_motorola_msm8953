@@ -54,6 +54,12 @@
 	qcom,mdss-pref-prim-intf = "dsi";
 };
 
+&wled {
+	qcom,fs-curr-ua = <25000>;
+	qcom,cons-sync-write-delay-us = <1000>;
+	qcom,en-cabc;
+};
+
 &mdss_dsi0 {
 	qcom,display-id = "primary";
 	qcom,dsi-pref-prim-pan = <&mot_tianma_550_1080p_vid_v0>;

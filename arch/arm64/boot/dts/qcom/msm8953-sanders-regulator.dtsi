@@ -47,9 +47,37 @@
 		};
 	};
 
+	rpm-regulator-ldoa17 {
+		pm8953_l17: regulator-l17 {
+			regulator-min-microvolt = <2800000>;
+			regulator-max-microvolt = <2800000>;
+			qcom,init-voltage = <2800000>;
+		};
+	};
+
+	rpm-regulator-ldoa22 {
+		pm8953_l22: regulator-l22 {
+			regulator-min-microvolt = <2800000>;
+			regulator-max-microvolt = <2800000>;
+			qcom,init-voltage = <2800000>;
+		};
+	};
+
 	rpm-regulator-ldoa23 {
 		pm8953_l23: regulator-l23 {
 			qcom,init-voltage = <1200000>;
 		};
+	};
+};
+
+&soc {
+	/delete-node/ adv_vreg;
+
+	vci_fci_vreg: vci_fci_vreg {
+		compatible = "regulator-fixed";
+		regulator-name = "vci_fci";
+		startup-delay-us = <300>;
+		enable-active-high;
+		regulator-boot-on;
 	};
 };

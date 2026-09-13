@@ -4,6 +4,8 @@
  * vdd_ana/vcc_spi/vdd_io).
  */
 
+#include <dt-bindings/interrupt-controller/irq.h>
+
 &soc {
 	spi_8: spi@7af8000 { /* BLSP2 QUP3 */
 		compatible = "qcom,spi-qup-v2";
@@ -13,7 +15,7 @@
 		reg-names = "spi_physical";
 		reg = <0x07af8000 0x600>;
 		interrupt-names = "spi_irq";
-		interrupts = <0 302 0>;
+		interrupts = <0 302 IRQ_TYPE_LEVEL_HIGH>;
 		spi-max-frequency = <19200000>;
 
 		pinctrl-names = "spi_default", "spi_sleep";

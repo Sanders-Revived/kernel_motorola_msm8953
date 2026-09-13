@@ -60,6 +60,7 @@ jobs:
             CROSS_COMPILE=aarch64-linux-gnu- olddefconfig
           grep -q '^CONFIG_TOUCHSCREEN_FTS=y$' canonical.config
           grep -q '^CONFIG_SENSORS_FPC_1020=m$' canonical.config
+          grep -q '^CONFIG_INPUT_QTI_HAPTICS=y$' canonical.config
           grep -q '^CONFIG_BUILD_ARM64_APPENDED_DTB_IMAGE_NAMES=.*sanders-p4"$' canonical.config
           grep -q '^CONFIG_NO_TECHPACK_AUDIO=y$' canonical.config
           grep -q '^# CONFIG_MSM_CAMERA is not set$' canonical.config

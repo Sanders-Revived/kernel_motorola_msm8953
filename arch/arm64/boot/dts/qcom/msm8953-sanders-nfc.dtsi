@@ -1,0 +1,25 @@
+/ {
+	aliases {
+		i2c5 = &i2c_5;
+	};
+};
+
+&i2c_5 { /* BLSP2 QUP1 (NFC) */
+	qcom,disable-dma;
+
+	pnxxx: pnxxx@28 {
+	    compatible = "nxp,pn544";
+	    reg = <0x28>;
+	    interrupt-parent = <&tlmm>;
+	    interrupts = <17 0>;
+	    gpios = <&tlmm 17 0>, /* IRQ */
+	    <&tlmm 16 0>, /* VEN */
+	    <&tlmm 62 0>; /* Firmware */
+
+	    nxp,pnxxx-discharge-delay = <100>;
+	    nxp,pnxxx-ven-inv-polarity = <0>;
+
+	    pinctrl-names = "default";
+	    pinctrl-0=<&nfc_irq_default &nfc_pwr_default &nfc_firm_default>;
+	};
+};

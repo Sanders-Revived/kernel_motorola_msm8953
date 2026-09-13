@@ -17,3 +17,127 @@
 &pm8953_typec {
 	status = "disabled";
 };
+
+&pm8953_gpios {
+	gpio@c100 { /* GPIO 2 */
+		status = "okay";
+		qcom,mode = <0>;
+		qcom,output-type = <0>;
+		qcom,invert = <0>;
+		qcom,pull = <5>;
+		qcom,vin-sel = <2>;
+		qcom,out-strength = <3>;
+		qcom,src-sel = <0>;
+		qcom,master-en = <1>;
+	};
+
+	gpio@c400 {
+		qcom,mode = <0>;
+		qcom,pull = <5>;
+		qcom,vin-sel = <2>;
+		qcom,src-sel = <0>;
+		qcom,out-strength = <2>;
+		qcom,master-en = <1>;
+		status = "okay";
+	};
+
+	gpio@c500 { /* GPIO 6 - USB_SELECT */
+		qcom,mode = <1>;
+		qcom,pull = <5>;
+		qcom,vin-sel = <2>;
+		qcom,src-sel = <0>;
+		qcom,out-strength = <2>;
+		qcom,master-en = <1>;
+		status = "okay";
+	};
+
+	gpio@c600 { /* GPIO 7 - USB_SS_MOD_EN */
+		qcom,mode = <1>;
+		qcom,pull = <5>;
+		qcom,vin-sel = <2>;
+		qcom,src-sel = <0>;
+		qcom,out-strength = <2>;
+		qcom,master-en = <1>;
+		status = "okay";
+	};
+
+	gpio@c700 { /* GPIO 8 - USB_SS_MOD_MPHY_AP_EN */
+		qcom,mode = <1>;
+		qcom,pull = <5>;
+		qcom,vin-sel = <2>;
+		qcom,src-sel = <0>;
+		qcom,out-strength = <2>;
+		qcom,master-en = <1>;
+		status = "okay";
+	};
+};
+
+&pmi8950_mpps {
+	mpp@a300 { /* MPP4 MOD_BPLUS_FAULT_N */
+		qcom,mode = <0>;
+		qcom,vin-sel = <2>;
+		qcom,src-sel = <0>;
+		qcom,master-en = <1>;
+		status = "okay";
+	};
+
+	mpp@a000 {
+		/* Host detect */
+		status = "ok";
+		qcom,mode = <4>;
+		qcom,ain-route = <0>;
+		qcom,master-en = <1>;
+		qcom,src-sel = <0>;
+	};
+
+	mpp@a200 {
+		qcom,mode = <1>;
+		qcom,output-type = <0>;
+		qcom,vin-sel = <0>;
+		qcom,src-sel = <5>;
+		qcom,master-en = <1>;
+		qcom,invert = <0>;
+		status = "okay";
+	};
+};
+
+&pmi8950_gpios {	gpio@c000 { /* GPIO 1 - MOD_BPLUS_EN */
+		qcom,mode = <1>;
+		qcom,pull = <5>;
+		qcom,vin-sel = <0>;
+		qcom,src-sel = <0>;
+		qcom,master-en = <1>;
+		qcom,invert = <0>;
+		status = "okay";
+	};
+
+	gpio@c100 {
+		qcom,mode = <1>;
+		qcom,pull = <5>;
+		qcom,vin-sel = <0>;
+		qcom,src-sel = <0>;
+		qcom,master-en = <1>;
+		qcom,invert = <0>;
+		status = "okay";
+	};
+};
+
+&spmi_bus {
+	qcom,pmi8950@2 {
+		qcom,leds@a100 {
+			status = "okay";
+			qcom,led_mpp_2 {
+				label = "mpp";
+				linux,name = "charging";
+				linux,default-trigger = "none";
+				qcom,default-state = "off";
+				qcom,max-current = <40>;
+				qcom,current-setting = <5>;
+				qcom,id = <6>;
+				qcom,mode = "manual";
+				qcom,source-sel = <1>;
+				qcom,mode-ctrl = <0x60>;
+			};
+		};
+	};
+};

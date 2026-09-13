@@ -16,6 +16,16 @@
 #include "msm8953-sanders-pinctrl.dtsi"
 #include "msm8953-sanders-fps.dtsi"
 #include "msm8953-sanders-touch.dtsi"
+#include "msm8953-sanders-usb.dtsi"
+#include "msm8953-sanders-misc.dtsi"
+#include "msm8953-sanders-sensor.dtsi"
+#include "msm8953-sanders-vibrator.dtsi"
+#include "msm8953-sanders-soc.dtsi"
+#include "msm8953-sanders-android.dtsi"
+#include "msm8953-sanders-nfc.dtsi"
+#include "msm8953-sanders-camera.dtsi"
+#include "msm8953-sanders-audio.dtsi"
+#include "msm8953-sanders-carrier.dtsi"
 
 / {
 	model = "Motorola Moto G5S Plus";

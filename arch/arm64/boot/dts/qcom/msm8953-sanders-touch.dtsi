@@ -6,6 +6,7 @@
 
 &i2c_3 {
 	status = "okay";
+	qcom,disable-dma;
 
 	focaltech_ts@38 {
 		compatible = "focaltech,fts_ts";

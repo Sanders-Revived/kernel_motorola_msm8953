@@ -1,0 +1,145 @@
+&soc {
+	alsa_to_h2w {
+		compatible = "mmi,alsa-to-h2w";
+	};
+
+	/delete-node/ sound-9335;
+
+	dummy_vreg: dummy_vreg {
+		compatible = "regulator-fixed";
+		status = "ok";
+		regulator-name = "dummy_vreg";
+		regulator-always-on;
+	};
+
+	ospl {
+		compatible = "mmi,ospl2xx";
+		status = "ok";
+		mmi,ospl-tune-index = <0 1 2 3>;
+		mmi,ospl-afe-port-id = <0x1016 0x1017>;
+		mmi,ospl-left-feedback;
+	};
+
+	sound {
+		status = "okay";
+		qcom,model = "msm8953-snd-card";
+		qcom,msm-mbhc-hphl-swh = <1>;
+		qcom,msm-mbhc-gnd-swh = <0>;
+		qcom,msm-micbias1-ext-cap;
+		qcom,msm-hs-micbias-type = "internal";
+		qcom,msm-ext-pa = "quinary";
+		qcom,audio-routing =
+			"RX_BIAS", "MCLK",
+			"INT_LDO_H", "MCLK",
+			"MIC BIAS External", "Handset Mic",
+			"MIC BIAS Internal2", "Headset Mic",
+			"MIC BIAS External", "Secondary Mic",
+			"AMIC1", "MIC BIAS External",
+			"AMIC2", "MIC BIAS Internal2",
+			"AMIC3", "MIC BIAS External";
+		/delete-property/ qcom,cdc-us-euro-gpios;
+		/delete-property/ qcom,hdmi-dba-codec-rx;
+		/delete-property/ asoc-wsa-codec-names;
+		/delete-property/ asoc-wsa-codec-prefixes;
+
+		/delete-property/ msm-vdd-wsa-switch-supply;
+		/delete-property/ qcom,msm-vdd-wsa-switch-voltage;
+		/delete-property/ qcom,msm-vdd-wsa-switch-current;
+		qcom,msm-gpios =
+			"pri_i2s",
+			"quin_i2s",
+			"comp_gpio",
+			"cs35l35_mclk";
+
+		qcom,pinctrl-names =
+			"all_off",
+			"pri_i2s_act",
+			"quin_act",
+			"quin_pri_i2s_act",
+			"comp_gpio_act",
+			"comp_gpio_pri_i2s_act",
+			"comp_gpio_quin_act",
+			"comp_gpio_quin_pri_i2s_act",
+			"cs35l35_mclk_act",
+			"cs35l35_mclk_pri_i2s_act",
+			"cs35l35_mclk_quin_act",
+			"cs35l35_mclk_quin_pri_i2s_act",
+			"cs35l35_mclk_comp_gpio_act",
+			"cs35l35_mclk_comp_gpio_pri_i2s_act",
+			"cs35l35_mclk_comp_gpio_quin_act",
+			"all_act";
+
+		pinctrl-0 = <&cdc_pdm_lines_sus &cdc_pdm_comp_lines_sus
+			&cdc_pdm_lines_2_sus &pri_tlmm_lines_sus
+			&pri_tlmm_ws_sus &cs35l35_mclk_off>;
+		pinctrl-1 = <&cdc_pdm_lines_act &cdc_pdm_comp_lines_sus
+			&cdc_pdm_lines_2_act &pri_tlmm_lines_sus
+			&pri_tlmm_ws_sus &cs35l35_mclk_off>;
+		pinctrl-2 = <&cdc_pdm_lines_sus &cdc_pdm_comp_lines_sus
+			&cdc_pdm_lines_2_sus &pri_tlmm_lines_act
+			&pri_tlmm_ws_act &cs35l35_mclk_off>;
+		pinctrl-3 = <&cdc_pdm_lines_act &cdc_pdm_comp_lines_sus
+			&cdc_pdm_lines_2_act &pri_tlmm_lines_act
+			&pri_tlmm_ws_act &cs35l35_mclk_off>;
+		pinctrl-4 = <&cdc_pdm_lines_sus &cdc_pdm_comp_lines_act
+			&cdc_pdm_lines_2_sus &pri_tlmm_lines_sus
+			&pri_tlmm_ws_sus &cs35l35_mclk_off>;
+		pinctrl-5 = <&cdc_pdm_lines_act &cdc_pdm_comp_lines_act
+			&cdc_pdm_lines_2_act &pri_tlmm_lines_sus
+			&pri_tlmm_ws_sus &cs35l35_mclk_off>;
+		pinctrl-6 = <&cdc_pdm_lines_sus &cdc_pdm_comp_lines_act
+			&cdc_pdm_lines_2_sus &pri_tlmm_lines_act
+			&pri_tlmm_ws_act &cs35l35_mclk_off>;
+		pinctrl-7 = <&cdc_pdm_lines_act &cdc_pdm_comp_lines_act
+			&cdc_pdm_lines_2_act &pri_tlmm_lines_act
+			&pri_tlmm_ws_act &cs35l35_mclk_off>;
+		pinctrl-8 = <&cdc_pdm_lines_sus &cdc_pdm_comp_lines_sus
+			&cdc_pdm_lines_2_sus &pri_tlmm_lines_sus
+			&pri_tlmm_ws_sus &cs35l35_mclk_on>;
+		pinctrl-9 = <&cdc_pdm_lines_act &cdc_pdm_comp_lines_sus
+			&cdc_pdm_lines_2_act &pri_tlmm_lines_sus
+			&pri_tlmm_ws_sus &cs35l35_mclk_on>;
+		pinctrl-10 = <&cdc_pdm_lines_sus &cdc_pdm_comp_lines_sus
+			&cdc_pdm_lines_2_sus &pri_tlmm_lines_act
+			&pri_tlmm_ws_act &cs35l35_mclk_on>;
+		pinctrl-11 = <&cdc_pdm_lines_act &cdc_pdm_comp_lines_sus
+			&cdc_pdm_lines_2_act &pri_tlmm_lines_act
+			&pri_tlmm_ws_act &cs35l35_mclk_on>;
+		pinctrl-12 = <&cdc_pdm_lines_sus &cdc_pdm_comp_lines_act
+			&cdc_pdm_lines_2_sus &pri_tlmm_lines_sus
+			&pri_tlmm_ws_sus &cs35l35_mclk_on>;
+		pinctrl-13 = <&cdc_pdm_lines_act &cdc_pdm_comp_lines_act
+			&cdc_pdm_lines_2_act &pri_tlmm_lines_sus
+			&pri_tlmm_ws_sus &cs35l35_mclk_on>;
+		pinctrl-14 = <&cdc_pdm_lines_sus &cdc_pdm_comp_lines_act
+			&cdc_pdm_lines_2_sus &pri_tlmm_lines_act
+			&pri_tlmm_ws_act &cs35l35_mclk_on>;
+		pinctrl-15 = <&cdc_pdm_lines_act &cdc_pdm_comp_lines_act
+			&cdc_pdm_lines_2_act &pri_tlmm_lines_act
+			&pri_tlmm_ws_act &cs35l35_mclk_on>;
+
+	};
+
+		cs35l35@40 {
+			compatible = "cirrus,cs35l35";
+			reg = <0x40>;
+			reset-gpio = <&tlmm 137 0>;
+			irq-gpio = <&tlmm 132 1>;
+			interrupt-parent = <&tlmm>;
+			interrupts = <132 8>;
+
+			VA-supply = <&dummy_vreg>;
+			VP-supply = <&dummy_vreg>;
+			pinctrl-names = "default";
+			pinctrl-0 = <&cs35l35_irq_default &cs35l35_reset_default>;
+	};
+};
+
+&slim_msm {
+	status = "disabled";
+	/delete-node/ tasha_codec;
+	marley-codec {
+		compatible = "cirrus,marley-slim-audio";
+		elemental-addr = [00 7F 60 63 FA 01];
+	};
+};

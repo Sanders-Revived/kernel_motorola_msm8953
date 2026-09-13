@@ -1,0 +1,98 @@
+#include <dt-bindings/interrupt-controller/irq.h>
+
+/ {
+	aliases {
+		spi1 = &spi_1;
+	};
+
+	utags {
+		compatible = "mmi,utags";
+		mmi,main-utags = "/dev/block/bootdevice/by-name/utags";
+		mmi,backup-utags = "/dev/block/bootdevice/by-name/utagsBackup";
+	};
+
+	hw {
+		compatible = "mmi,utags";
+		mmi,dir-name = "hw";
+		mmi,main-utags = "/dev/block/bootdevice/by-name/hw";
+	};
+
+};
+
+&soc {
+	qcom,tz_gpio {
+		compatible = "qcom,tz_gpio";
+		tlmm-tz = <96>,
+			<97>,
+			<98>,
+			<99>;
+	};
+
+	spi_1: spi@78b5000 {/* BLSP1 QUP1 */
+		compatible = "qcom,spi-qup-v2";
+		#address-cells = <1>;
+		#size-cells = <0>;
+		reg-names = "spi_physical", "spi_bam_physical";
+		reg = <0x078b5000 0x600>,
+		<0x07884000 0x1f000>;
+		interrupt-names = "spi_irq", "spi_bam_irq";
+		interrupts = <0 95 IRQ_TYPE_LEVEL_HIGH>, <0 238 IRQ_TYPE_LEVEL_HIGH>;
+		spi-max-frequency = <50000000>;
+		pinctrl-names = "spi_default", "spi_sleep";
+		pinctrl-0 = <&spi_1_active &spi1_cs0_active>;
+		pinctrl-1 = <&spi_1_sleep &spi1_cs0_sleep>;
+		clocks = <&clock_gcc clk_gcc_blsp1_ahb_clk>,
+			 <&clock_gcc clk_gcc_blsp1_qup1_spi_apps_clk>;
+		clock-names = "iface_clk", "core_clk";
+		qcom,infinite-mode = <0>;
+		qcom,use-bam;
+		qcom,use-pinctrl;
+		qcom,ver-reg-exists;
+		qcom,bam-consumer-pipe-index = <4>;
+		qcom,bam-producer-pipe-index = <5>;
+		qcom,master-id = <86>;
+		status = "ok";
+
+		fci_dtv: fc8300@0 {
+			status = "ok";
+			compatible = "fci,isdbt";
+			reg = <0>;
+			spi-max-frequency = <50000000>;
+			irq-gpio = <&tlmm 38 0>;
+			enable-gpio = <&tlmm 8 0>;
+			reset-gpio = <&tlmm 36 0>;
+			vdd_enable = <&tlmm 33 0>;
+			vdd_enable_support;
+			enable-active-high;
+			pinctrl-names = "default";
+			pinctrl-0 = <&dtv_output_default &dtv_input_default>;
+			isdbt_vdd-supply = <&vci_fci_vreg>;
+			qcom,vdd-min-max-voltage = <1800000 1800000>;
+			bbm-xtal-freq = <26000>;
+			lna_control_support;
+		};
+	};
+
+	gpio_keys {
+		compatible = "gpio-keys";
+		input-name = "gpio-keys";
+		pinctrl-names = "tlmm_gpio_key_active","tlmm_gpio_key_suspend";
+		pinctrl-0 = <&gpio_key>;
+		pinctrl-1 = <&gpio_key>;
+
+		vol_up {
+			label = "volume_up";
+			gpios = <&tlmm 85 0x1>;
+			linux,input-type = <1>;
+			linux,code = <115>;
+			gpio-key,wakeup;
+			debounce-interval = <15>;
+		};
+	};
+};
+
+&blsp1_uart0 {
+	status = "ok";
+	pinctrl-names = "default";
+	pinctrl-0 = <&uart_console_active>;
+};
