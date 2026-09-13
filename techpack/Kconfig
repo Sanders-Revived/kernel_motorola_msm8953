@@ -1,2 +1,5 @@
+config NO_TECHPACK_AUDIO
+	bool "Do not compile legacy audio techpack"
+
 source "techpack/camera-legacy/Kconfig"
 source "techpack/camera-legacy-n/Kconfig"
