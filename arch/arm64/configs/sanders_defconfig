@@ -58,6 +58,7 @@ CONFIG_RANDOMIZE_BASE=y
 CONFIG_CMDLINE="cgroup_disable=pressure"
 CONFIG_CMDLINE_EXTEND=y
 CONFIG_BUILD_ARM64_APPENDED_DTB_IMAGE=y
+CONFIG_BUILD_ARM64_APPENDED_DTB_IMAGE_NAMES="qcom/msm8953-motorola-sanders-p1 qcom/msm8953-motorola-sanders-p2 qcom/msm8953-motorola-sanders-p3 qcom/msm8953-motorola-sanders-p4"
 CONFIG_COMPAT=y
 CONFIG_PM_WAKELOCKS=y
 CONFIG_PM_WAKELOCKS_LIMIT=0
