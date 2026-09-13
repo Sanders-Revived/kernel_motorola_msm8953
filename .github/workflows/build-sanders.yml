@@ -3,7 +3,7 @@ name: build sanders 4.19
 on:
   push:
     branches:
-      - sanders
+      - sanders/4.19.325-WIP
     paths:
       - arch/arm64/configs/vendor/sanders.config
       - arch/arm64/boot/dts/qcom/Makefile
@@ -41,16 +41,33 @@ jobs:
             arch/arm64/configs/vendor/mi8953.config \
             arch/arm64/configs/vendor/sanders.config
           make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- olddefconfig
+          make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- savedefconfig
+          cp defconfig canonical-sanders_defconfig
+
+      - name: verify lineage defconfigs
+        run: |
+          cp .config canonical.config
+          make O="$PWD/out-lineage" ARCH=arm64 \
+            CROSS_COMPILE=aarch64-linux-gnu- sanders_defconfig
+          make O="$PWD/out-lineage" ARCH=arm64 \
+            CROSS_COMPILE=aarch64-linux-gnu- olddefconfig
+          python3 scripts/diffconfig canonical.config out-lineage/.config \
+            | tee lineage-config.diff
+          test ! -s lineage-config.diff
+          make O="$PWD/out-recovery" ARCH=arm64 \
+            CROSS_COMPILE=aarch64-linux-gnu- sanders_recovery_defconfig
+          make O="$PWD/out-recovery" ARCH=arm64 \
+            CROSS_COMPILE=aarch64-linux-gnu- olddefconfig
+          grep -q '^CONFIG_TOUCHSCREEN_FTS=y$' canonical.config
+          grep -q '^CONFIG_SENSORS_FPC_1020=m$' canonical.config
+          grep -q '^# CONFIG_MACH_XIAOMI_MSM8953 is not set$' canonical.config
+
 
       - name: build image and dtbs
         run: |
           make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- \
-            -j$(nproc) Image.gz
-          make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- \
-            qcom/msm8953-motorola-sanders-p1.dtb \
-            qcom/msm8953-motorola-sanders-p2.dtb \
-            qcom/msm8953-motorola-sanders-p3.dtb \
-            qcom/msm8953-motorola-sanders-p4.dtb
+            -j$(nproc) Image.gz modules dtbs
+          test -f drivers/input/misc/fpc1020_tee.ko
 
       - name: verify sanders dtbs
         run: |
@@ -61,11 +78,8 @@ jobs:
           git clone --depth 1 --branch lineage-18.1 \
             https://github.com/LineageOS/android_system_tools_dtbtool.git dtbtool
           gcc -O2 -o dtbToolLineage dtbtool/dtbtool.c
-          mkdir sanders-dtbs
-          cp arch/arm64/boot/dts/qcom/msm8953-motorola-sanders-p?.dtb \
-            sanders-dtbs/
           ./dtbToolLineage -o dt.img -s 2048 -p "$PWD/scripts/dtc/" \
-            sanders-dtbs/
+            arch/arm64/boot/
           lz4 -9 -f dt.img dt.img.lz4
           test "$(od -An -tx1 -N4 dt.img | tr -d ' \n')" = "51434454"
 
@@ -81,6 +95,17 @@ jobs:
         with:
           name: sanders-419-image
           path: arch/arm64/boot/Image.gz
+          if-no-files-found: error
+
+      - name: upload build config and fingerprint module
+        uses: actions/upload-artifact@v4
+        with:
+          name: sanders-419-build-data
+          path: |
+            canonical.config
+            canonical-sanders_defconfig
+            lineage-config.diff
+            drivers/input/misc/fpc1020_tee.ko
           if-no-files-found: error
 
       - name: upload sanders dtbs
