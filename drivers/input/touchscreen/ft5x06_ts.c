@@ -2751,6 +2751,8 @@ static const struct of_device_id ft5x06_match_table[] = {
 #define ft5x06_match_table NULL
 #endif
 
+MODULE_DEVICE_TABLE(of, ft5x06_match_table);
+
 static struct i2c_driver ft5x06_ts_driver = {
 	.probe = ft5x06_ts_probe,
 	.remove = ft5x06_ts_remove,
@@ -2765,17 +2767,7 @@ static struct i2c_driver ft5x06_ts_driver = {
 	.id_table = ft5x06_ts_id,
 };
 
-static int __init ft5x06_ts_init(void)
-{
-	return i2c_add_driver(&ft5x06_ts_driver);
-}
-module_init(ft5x06_ts_init);
-
-static void __exit ft5x06_ts_exit(void)
-{
-	i2c_del_driver(&ft5x06_ts_driver);
-}
-module_exit(ft5x06_ts_exit);
+module_i2c_driver(ft5x06_ts_driver);
 
 MODULE_DESCRIPTION("FocalTech ft5x06 TouchScreen driver");
 MODULE_LICENSE("GPL v2");
