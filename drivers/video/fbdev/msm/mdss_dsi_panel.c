@@ -17,10 +17,6 @@
 #include <linux/err.h>
 #include <linux/string.h>
 #include <linux/display_state.h>
-#if IS_ENABLED(CONFIG_MACH_XIAOMI_MSM8953)
-#include <xiaomi-msm8953/mach.h>
-#endif
-
 #include "mdss_dsi.h"
 #include "mdss_dba_utils.h"
 #include "mdss_debug.h"
@@ -383,18 +379,11 @@ ret:
 	return rc;
 }
 
-#if IS_ENABLED(CONFIG_MACH_XIAOMI_VINCE)
-extern bool pullDownReset;
-#else
-static const bool pullDownReset = true;
-#endif
-
 int mdss_dsi_panel_reset(struct mdss_panel_data *pdata, int enable)
 {
     struct mdss_dsi_ctrl_pdata *ctrl_pdata = NULL;
     struct mdss_panel_info *pinfo = NULL;
     int i, rc = 0;
-    bool is_vince = false;
 
     if (pdata == NULL) {
         pr_err("%s: Invalid input data\n", __func__);
@@ -403,11 +392,6 @@ int mdss_dsi_panel_reset(struct mdss_panel_data *pdata, int enable)
 
     ctrl_pdata = container_of(pdata, struct mdss_dsi_ctrl_pdata,
                 panel_data);
-
-#if IS_ENABLED(CONFIG_MACH_XIAOMI_VINCE)
-    if (xiaomi_msm8953_mach_get() == XIAOMI_MSM8953_MACH_VINCE)
-        is_vince = true;
-#endif
 
     pinfo = &(ctrl_pdata->panel_data.panel_info);
     if ((mdss_dsi_is_right_ctrl(ctrl_pdata) &&
@@ -520,9 +504,7 @@ int mdss_dsi_panel_reset(struct mdss_panel_data *pdata, int enable)
             gpio_set_value((ctrl_pdata->disp_en_gpio), 0);
             gpio_free(ctrl_pdata->disp_en_gpio);
         }
-        if (!is_vince || pullDownReset) {
-            gpio_set_value((ctrl_pdata->rst_gpio), 0);
-        }
+        gpio_set_value((ctrl_pdata->rst_gpio), 0);
         gpio_free(ctrl_pdata->rst_gpio);
 
         if (gpio_is_valid(ctrl_pdata->lcd_mode_sel_gpio)) {
@@ -1832,51 +1814,12 @@ static int mdss_dsi_parse_reset_seq(struct device_node *np,
 	return 0;
 }
 
-#if IS_ENABLED(CONFIG_MACH_XIAOMI_YSL)
-static char sleep_out[1] = {0x11};	/* DTYPE_DCS_WRITE1 */
-static struct dsi_cmd_desc sleep_out_cmd = {
-	{DTYPE_DCS_LWRITE, 1, 0, 0, 5, sizeof(sleep_out)},
-	sleep_out
-};
-/* add sleep out for truly panel fix esd problem */
-static int mdss_dsi_truly_set_sleep_out(struct mdss_dsi_ctrl_pdata *ctrl)
-{
-	struct dcs_cmd_req cmdreq;
-	struct mdss_panel_info *pinfo;
-
-	//pr_debug("%s:start truly sleep out\n", __func__);
-
-	pinfo = &(ctrl->panel_data.panel_info);
-	if (pinfo->dcs_cmd_by_left) {
-		if (ctrl->ndx != DSI_CTRL_LEFT)
-			return -EINVAL;
-	}
-
-		cmdreq.cmds = &sleep_out_cmd;
-		cmdreq.cmds_cnt = 1;
-		cmdreq.flags = CMD_REQ_COMMIT | CMD_CLK_CTRL | CMD_REQ_HS_MODE;
-		cmdreq.rlen = 0;
-		cmdreq.cb = NULL;
-		mdss_dsi_cmdlist_put(ctrl, &cmdreq);
-
-	//pr_debug("%s:end truly sleep out\n", __func__);
-	return 0;
-}
-#endif
-
 static bool mdss_dsi_cmp_panel_reg_v2(struct mdss_dsi_ctrl_pdata *ctrl)
 {
 	bool mismatched;
 	int i, j = 0;
 	int len = 0, *lenp;
 	int group = 0;
-
-#if IS_ENABLED(CONFIG_MACH_XIAOMI_YSL)
-	if (xiaomi_msm8953_mach_get() == XIAOMI_MSM8953_MACH_YSL) {
-		if (!strncmp(ctrl->panel_data.panel_info.panel_name, "truly hx8394f", 13))
-			mdss_dsi_truly_set_sleep_out(ctrl);
-	}
-#endif
 
 	lenp = ctrl->status_valid_params ?: ctrl->status_cmds_rlen;
 
@@ -2132,14 +2075,6 @@ static void mdss_dsi_parse_esd_params(struct device_node *np,
 			ctrl->status_error_count = 0;
 			ctrl->check_read_status =
 				mdss_dsi_gen_read_status;
-#if IS_ENABLED(CONFIG_MACH_XIAOMI_MIDO) || \
-    IS_ENABLED(CONFIG_MACH_XIAOMI_VINCE)
-		} else if (!strcmp(string, "TE_check_NT35596")) {
-			if (xiaomi_msm8953_mach_get() == XIAOMI_MSM8953_MACH_VINCE ||
-                xiaomi_msm8953_mach_get() == XIAOMI_MSM8953_MACH_MIDO) {
-				ctrl->status_mode = ESD_TE_NT35596;
-			}
-#endif
 		} else if (!strcmp(string, "reg_read_nt35596")) {
 			ctrl->status_mode = ESD_REG_NT35596;
 			ctrl->status_error_count = 0;

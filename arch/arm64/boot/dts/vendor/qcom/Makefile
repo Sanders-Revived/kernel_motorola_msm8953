@@ -534,11 +534,6 @@ sdm632-qrd-overlay.dtbo-base := sdm632.dtb \
 	sdm632-pm8004.dtb
 
 else
-ifeq ($(CONFIG_MACH_XIAOMI_MSM8953),y)
-dtb-$(CONFIG_MACH_XIAOMI_ROSY) += rosy-titanium.dtb
-dtb-$(CONFIG_MACH_XIAOMI_VINCE) += vince-titanium.dtb
-dtb-$(CONFIG_MACH_XIAOMI_YSL) += ysl-titanium.dtb
-dtb-$(CONFIG_MACH_XIAOMI_MIDO) += mido-titanium.dtb
 else
 dtb-$(CONFIG_ARCH_MSM8953) += msm8953-cdp.dtb \
 	msm8953-mtp.dtb \

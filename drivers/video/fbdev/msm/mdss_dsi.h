@@ -16,9 +16,6 @@
 #include "mdss_panel.h"
 #include "mdss_dsi_cmd.h"
 #include "mdss_dsi_clk.h"
-#if IS_ENABLED(CONFIG_MACH_XIAOMI_MSM8953)
-#include <xiaomi-msm8953/mach.h>
-#endif
 
 #define MMSS_SERDES_BASE_PHY 0x04f01000 /* mmss (De)Serializer CFG */
 
@@ -104,10 +101,6 @@ enum dsi_panel_status_mode {
 	ESD_BTA,
 	ESD_REG,
 	ESD_REG_NT35596,
-#if IS_ENABLED(CONFIG_MACH_XIAOMI_MIDO) || \
-    IS_ENABLED(CONFIG_MACH_XIAOMI_VINCE)
-	ESD_TE_NT35596,
-#endif
 	ESD_TE,
 	ESD_MAX,
 };
@@ -243,11 +236,6 @@ enum dsi_pm_type {
 extern struct device dsi_dev;
 extern u32 dsi_irq;
 extern struct mdss_dsi_ctrl_pdata *ctrl_list[];
-
-#if IS_ENABLED(CONFIG_MACH_XIAOMI_VINCE)
-extern bool synaptics_gesture_func_on;
-extern bool synaptics_gesture_func_on_lansi;
-#endif
 
 enum {
 	DSI_CTRL_0,
@@ -691,10 +679,6 @@ int mdss_dsi_cmdlist_commit(struct mdss_dsi_ctrl_pdata *ctrl, int from_mdp);
 void mdss_dsi_cmdlist_kickoff(int intf);
 int mdss_dsi_bta_status_check(struct mdss_dsi_ctrl_pdata *ctrl);
 int mdss_dsi_reg_status_check(struct mdss_dsi_ctrl_pdata *ctrl);
-#if IS_ENABLED(CONFIG_MACH_XIAOMI_MIDO) || \
-    IS_ENABLED(CONFIG_MACH_XIAOMI_VINCE)
-int mdss_dsi_TE_NT35596_check(struct mdss_dsi_ctrl_pdata *ctrl);
-#endif
 bool __mdss_dsi_clk_enabled(struct mdss_dsi_ctrl_pdata *ctrl, u8 clk_type);
 void mdss_dsi_ctrl_setup(struct mdss_dsi_ctrl_pdata *ctrl);
 bool mdss_dsi_dln0_phy_err(struct mdss_dsi_ctrl_pdata *ctrl, bool print_en);
@@ -761,14 +745,6 @@ static inline const char *__mdss_dsi_pm_supply_node_name(
 	default:		return "???";
 	}
 }
-
-#if IS_ENABLED(CONFIG_MACH_XIAOMI_VINCE)
-struct NVT_CSOT_ESD{
-	bool nova_csot_panel;
-	bool ESD_TE_status;
-};
-struct NVT_CSOT_ESD *get_nvt_csot_esd_status(void);
-#endif
 
 static inline u32 mdss_dsi_get_hw_config(struct dsi_shared_data *sdata)
 {

@@ -17,10 +17,6 @@
 #include <linux/syscore_ops.h>
 #include <linux/uaccess.h>
 
-#if IS_ENABLED(CONFIG_MACH_XIAOMI_VINCE)
-bool pullDownReset = false;
-#endif
-
 /*
  * this indicates whether you can reboot with ctrl-alt-del: the default is yes
  */

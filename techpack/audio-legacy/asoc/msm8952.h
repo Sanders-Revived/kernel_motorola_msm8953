@@ -13,10 +13,6 @@
 #include "codecs/wsa881x-analog.h"
 #include <linux/regulator/consumer.h>
 #include <linux/regulator/driver.h>
-#if IS_ENABLED(CONFIG_MACH_XIAOMI_MSM8953)
-#include <xiaomi-msm8953/mach.h>
-#endif
-
 
 #define BTSCO_RATE_8KHZ 8000
 #define BTSCO_RATE_16KHZ 16000
@@ -36,10 +32,6 @@
 #define WCD_MBHC_DEF_RLOADS 5
 #define MAX_WSA_CODEC_NAME_LENGTH 80
 #define MSM_DT_MAX_PROP_SIZE 80
-
-#if IS_ENABLED(CONFIG_MACH_XIAOMI_MIDO)
-#define EXT_PA_MODE  5
-#endif
 
 enum {
 	DIG_CDC,
@@ -69,12 +61,6 @@ struct msm_asoc_mach_data {
 	int ext_pa;
 	int us_euro_gpio;
 	int spk_ext_pa_gpio;
-#if IS_ENABLED(CONFIG_MACH_XIAOMI_YSL)
-	int spk_ext_pa_gpio_lc;
-	struct delayed_work pa_gpio_work;
-	struct delayed_work pa_gpio_work_close;
-	unsigned char pa_is_on;
-#endif
 	int mclk_freq;
 	bool native_clk_set;
 	int lb_mode;

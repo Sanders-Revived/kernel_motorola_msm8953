@@ -23,10 +23,6 @@
 #include <asoc/msm-cdc-pinctrl.h>
 #include "msm8952.h"
 #include "msm-pcm-voice-v2.h"
-#if IS_ENABLED(CONFIG_MACH_XIAOMI_MSM8953)
-#include <xiaomi-msm8953/mach.h>
-#endif
-#include "spk_ext_pa_mtp.h"
 
 #define DRV_NAME "msm8952-asoc-wcd"
 
@@ -390,10 +386,6 @@ int is_ext_spk_gpio_support(struct platform_device *pdev,
 				__func__, pdata->spk_ext_pa_gpio);
 			return -EINVAL;
 		}
-#if IS_ENABLED(CONFIG_MACH_XIAOMI_MIDO)
-		if (xiaomi_msm8953_mach_get() == XIAOMI_MSM8953_MACH_MIDO)
-            gpio_direction_output(pdata->spk_ext_pa_gpio, 0);
-#endif
 	}
 	return 0;
 }
@@ -402,7 +394,7 @@ static int enable_spk_ext_pa(struct snd_soc_component *component, int enable)
 {
 	struct snd_soc_card *card = component->card;
     struct msm_asoc_mach_data *pdata = snd_soc_card_get_drvdata(card);
-    int is_mido = (xiaomi_msm8953_mach_get() == XIAOMI_MSM8953_MACH_MIDO);
+    int ret;
 
     if (!gpio_is_valid(pdata->spk_ext_pa_gpio)) {
         pr_err("%s: Invalid gpio: %d\n", __func__,
@@ -414,36 +406,21 @@ static int enable_spk_ext_pa(struct snd_soc_component *component, int enable)
         enable ? "Enable" : "Disable");
 
     if (enable) {
-        if (is_mido) {
-			int pa_mode = EXT_PA_MODE;
-            while (pa_mode > 0) {
-                gpio_set_value_cansleep(pdata->spk_ext_pa_gpio, 0);
-                udelay(2);
-                gpio_set_value_cansleep(pdata->spk_ext_pa_gpio, enable);
-                udelay(2);
-                pa_mode--;
-            }
-        } else {
-			int ret;
-            ret = msm_cdc_pinctrl_select_active_state(pdata->spk_ext_pa_gpio_p);
-            if (ret) {
-                pr_err("%s: gpio set cannot be activated %s\n",
-                        __func__, "ext_spk_gpio");
-                return ret;
-            }
-            gpio_set_value_cansleep(pdata->spk_ext_pa_gpio, enable);
+        ret = msm_cdc_pinctrl_select_active_state(pdata->spk_ext_pa_gpio_p);
+        if (ret) {
+            pr_err("%s: gpio set cannot be activated %s\n",
+                    __func__, "ext_spk_gpio");
+            return ret;
         }
+        gpio_set_value_cansleep(pdata->spk_ext_pa_gpio, enable);
     } else {
         gpio_set_value_cansleep(pdata->spk_ext_pa_gpio, enable);
-        
-        if (!is_mido) {
-			int ret;
-            ret = msm_cdc_pinctrl_select_sleep_state(pdata->spk_ext_pa_gpio_p);
-            if (ret) {
-                pr_err("%s: gpio set cannot be de-activated %s\n",
-                        __func__, "ext_spk_gpio");
-                return ret;
-            }
+
+        ret = msm_cdc_pinctrl_select_sleep_state(pdata->spk_ext_pa_gpio_p);
+        if (ret) {
+            pr_err("%s: gpio set cannot be de-activated %s\n",
+                    __func__, "ext_spk_gpio");
+            return ret;
         }
     }
     return 0;
@@ -1645,62 +1622,6 @@ static void *def_msm8952_wcd_mbhc_cal(void)
 	btn_high[3] = 450;
 	btn_low[4] = 500;
 	btn_high[4] = 500;
-
-#if IS_ENABLED(CONFIG_MACH_XIAOMI_MSM8953)
-	switch (xiaomi_msm8953_mach_get()) {
-		case XIAOMI_MSM8953_MACH_ROSY:
-			btn_low[0] = 25;
-			btn_high[0] = 75;
-			btn_low[1] = 200;
-			btn_high[1] = 225;
-			btn_low[2] = 325;
-			btn_high[2] = 450;
-			btn_low[3] = 500;
-			btn_high[3] = 510;
-			btn_low[4] = 530;
-			btn_high[4] = 540;
-			break;
-		case XIAOMI_MSM8953_MACH_YSL:
-			btn_low[0] = 100;
-			btn_high[0] = 100;
-			btn_low[1] = 200;
-			btn_high[1] = 200;
-			btn_low[2] = 450;
-			btn_high[2] = 450;
-			btn_low[3] = 500;
-			btn_high[3] = 500;
-			btn_low[4] = 500;
-			btn_high[4] = 500;
-			break;
-		case XIAOMI_MSM8953_MACH_VINCE:
-		case XIAOMI_MSM8953_MACH_SAKURA:
-			btn_low[0] = 91;
-			btn_high[0] = 91;
-			btn_low[1] = 259;
-			btn_high[1] = 259;
-			btn_low[2] = 488;
-			btn_high[2] = 488;
-			btn_low[3] = 488;
-			btn_high[3] = 488;
-			btn_low[4] = 488;
-			btn_high[4] = 488;
-			break;
-		case XIAOMI_MSM8953_MACH_MIDO:
-			btn_low[0] = 73;
-			btn_high[0] = 73;
-			btn_low[1] = 233;
-			btn_high[1] = 233;
-			btn_low[2] = 438;
-			btn_high[2] = 438;
-			btn_low[3] = 438;
-			btn_high[3] = 438;
-			btn_low[4] = 438;
-			btn_high[4] = 438;
-			break;
-		default:
-			break;
-	}
-#endif
 
 	return msm8952_wcd_cal;
 }
@@ -3316,33 +3237,6 @@ static struct snd_soc_card *msm8952_populate_sndcard_dailinks(
 			}
 		}
 	}
-#if IS_ENABLED(CONFIG_MACH_XIAOMI_MSM8953)
-	if (xiaomi_msm8953_mach_get() == XIAOMI_MSM8953_MACH_VINCE) {
-		for (i = 0; i < len1; i++) {
-			switch (msm8952_dai[i].id) {
-			case MSM_BACKEND_DAI_QUINARY_MI2S_TX:
-				msm8952_dai[i].codec_dai_name = "tas2557 ASI1";
-				msm8952_dai[i].codec_name = "tas2557.2-004c";
-				break;
-			default:
-				break;
-			}
-		}
-		{
-			int j;
-			for (j = 0; j < ARRAY_SIZE(msm8952_quin_dai_link); j++) {
-				switch (msm8952_quin_dai_link[j].id) {
-				case MSM_BACKEND_DAI_QUINARY_MI2S_RX:
-					msm8952_quin_dai_link[j].codec_dai_name = "tas2557 ASI1";
-					msm8952_quin_dai_link[j].codec_name = "tas2557.2-004c";
-					break;
-				default:
-					break;
-				}
-			}
-		}
-	}
-#endif
 	memcpy(msm8952_dai_links, msm8952_dai, sizeof(msm8952_dai));
 	dailink = msm8952_dai_links;
 
@@ -3703,13 +3597,6 @@ parse_mclk_freq:
 	pdata->lb_mode = false;
 	msm8952_dt_parse_cap_info(pdev, pdata);
 
-#if IS_ENABLED(CONFIG_MACH_XIAOMI_YSL)
-	if (xiaomi_msm8953_mach_get() == XIAOMI_MSM8953_MACH_YSL)
-		ret = msm_setup_spk_ext_pa(pdev, pdata);
-		if (ret)
-			pr_debug("%s, msm_setup_spk_ext_pa error!\n", __func__);
-#endif
-
 	card->dev = &pdev->dev;
 	platform_set_drvdata(pdev, card);
 	snd_soc_card_set_drvdata(card, pdata);
@@ -3718,10 +3605,6 @@ parse_mclk_freq:
 		goto err;
 	/* initialize timer */
 	INIT_DELAYED_WORK(&pdata->disable_int_mclk0_work, msm8952_disable_mclk);
-#if IS_ENABLED(CONFIG_MACH_XIAOMI_YSL)
-	if (xiaomi_msm8953_mach_get() == XIAOMI_MSM8953_MACH_YSL)
-		INIT_DELAYED_WORK(&pdata->pa_gpio_work, msm_spk_ext_pa_delayed);
-#endif
 	mutex_init(&pdata->cdc_int_mclk0_mutex);
 	atomic_set(&pdata->int_mclk0_rsc_ref, 0);
 	if (card->aux_dev) {
@@ -3814,32 +3697,6 @@ static struct platform_driver msm8952_asoc_machine_driver = {
 
 static int __init msm8952_machine_init(void)
 {
-#if IS_ENABLED(CONFIG_MACH_XIAOMI_MSM8953)
-	switch (xiaomi_msm8953_mach_get()) {
-		case XIAOMI_MSM8953_MACH_ROSY:
-			mbhc_cfg.key_code[1] = KEY_PREVIOUSSONG_NEW;
-			mbhc_cfg.key_code[2] = KEY_NEXTSONG_NEW;
-			mbhc_cfg.key_code[3] = KEY_VOICECOMMAND;
-			break;
-		case XIAOMI_MSM8953_MACH_MIDO:
-			mbhc_cfg.key_code[1] = BTN_1;
-			mbhc_cfg.key_code[2] = BTN_2;
-			mbhc_cfg.key_code[3] = 0;
-			break;
-		case XIAOMI_MSM8953_MACH_YSL:
-		case XIAOMI_MSM8953_MACH_VINCE:
-		case XIAOMI_MSM8953_MACH_MARKW:
-		case XIAOMI_MSM8953_MACH_SAKURA:
-			mbhc_cfg.key_code[1] = KEY_MEDIA;
-			mbhc_cfg.key_code[2] = KEY_VOLUMEUP;
-			mbhc_cfg.key_code[3] = KEY_VOLUMEDOWN;
-			break;
-		case XIAOMI_MSM8953_MACH_TIFFANY:
-			break;
-		default:
-			break;
-	}
-#endif
 	return platform_driver_register(&msm8952_asoc_machine_driver);
 }
 module_init(msm8952_machine_init);
