@@ -1,4 +1,4 @@
-&soc {
+&i2c_3 {
 		focaltech_ts@38 {
 			compatible = "focaltech,5x06";
 			reg = <0x38>;
