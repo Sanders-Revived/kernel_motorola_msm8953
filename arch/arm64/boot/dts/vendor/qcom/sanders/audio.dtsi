@@ -154,6 +154,7 @@
 
 			VA-supply = <&dummy_vreg>;
 			VP-supply = <&dummy_vreg>;
+			cirrus,boost-ind-nanohenry = <1000>;
 			pinctrl-names = "default";
 			pinctrl-0 = <&cs35l35_irq_default &cs35l35_reset_default>;
 	};
