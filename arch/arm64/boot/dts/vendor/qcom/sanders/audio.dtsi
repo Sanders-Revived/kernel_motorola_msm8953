@@ -141,6 +141,9 @@
 					"analog-codec";
 	};
 
+};
+
+&i2c_7 {
 		cs35l35@40 {
 			compatible = "cirrus,cs35l35";
 			reg = <0x40>;

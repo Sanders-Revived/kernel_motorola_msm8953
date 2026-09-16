@@ -21,7 +21,6 @@
 /* Custom */
 
 #include "android.dtsi"
-#include "audio.dtsi"
 #include "battery.dtsi"
 #include "bus.dtsi"
 #include "camera.dtsi"
@@ -32,6 +31,7 @@
 #include "misc.dtsi"
 #include "nfc.dtsi"
 #include "pinctrl.dtsi"
+#include "audio.dtsi"
 #include "pm8953.dtsi"
 #include "pmi8950.dtsi"
 #include "regulator.dtsi"
