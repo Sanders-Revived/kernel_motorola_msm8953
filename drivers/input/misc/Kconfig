@@ -884,5 +884,11 @@ config INPUT_SC27XX_VIBRA
 
 	  To compile this driver as a module, choose M here. The module will
 	  be called sc27xx_vibra.
+config SENSORS_FPC_1020
+	tristate "fpc fingerprint sensor"
+	default n
+	help
+	  Say Y here if you wish to include support for finger print sensor.
+	  If unsure, say N.
 
 endif
