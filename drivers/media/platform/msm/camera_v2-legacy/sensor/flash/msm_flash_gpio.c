@@ -127,8 +127,7 @@ static int32_t msm_flash_gpio_init(
 		power_info->gpio_conf->cam_gpio_req_tbl,
 		power_info->gpio_conf->cam_gpio_req_tbl_size, 1);
 	if (rc < 0) {
-		pr_err("%s: request gpio failed\n", __func__);
-		return rc;
+		pr_warn("%s: request gpio returned %d, continuing\n", __func__, rc);
 	}
 	rc = flash_ctrl->func_tbl->camera_flash_off(flash_ctrl, flash_data);
 	CDBG("Exit");
@@ -297,36 +296,54 @@ static int32_t msm_flash_high(
 	return 0;
 }
 
-static int32_t msm_flash_release(
+static int32_t msm_flash_gpio_release(
 	struct msm_flash_ctrl_t *flash_ctrl)
 {
+	int32_t rc = 0;
 	struct msm_camera_power_ctrl_t *power_info = NULL;
 
 	CDBG("Enter\n");
 	CDBG("%s:%d called\n", __func__, __LINE__);
 
+	if (!flash_ctrl) {
+		pr_err("%s:%d flash_ctrl NULL\n", __func__, __LINE__);
+		return -EINVAL;
+	}
+
 	power_info = &flash_ctrl->power_info;
 
 	if (flash_ctrl->flash_state == MSM_CAMERA_FLASH_RELEASE) {
-		pr_err("%s:%d Invalid flash state = %d",
-			__func__, __LINE__, flash_ctrl->flash_state);
+		pr_debug("%s:%d Flash already released\n",
+			__func__, __LINE__);
 		return 0;
 	}
 
-	if (power_info->gpio_conf->cam_gpiomux_conf_tbl != NULL)
-		pr_err("%s:%d mux install\n", __func__, __LINE__);
+	if (power_info->gpio_conf) {
+		if (power_info->gpio_conf->cam_gpiomux_conf_tbl != NULL)
+			pr_err("%s:%d mux install\n", __func__, __LINE__);
 
-	if (power_info->gpio_conf->gpio_num_info->valid[0] == 1) {
-		gpio_set_value(
-		power_info->gpio_conf->gpio_num_info->gpio_num[0],
-		GPIO_OUT_LOW);
-		CDBG("%s:%d set flash en LOW\n", __func__, __LINE__);
-	}
-	if (power_info->gpio_conf->gpio_num_info->valid[1] == 1) {
-		gpio_set_value(
-		power_info->gpio_conf->gpio_num_info->gpio_num[1],
-		GPIO_OUT_LOW);
-		CDBG("%s:%d set flash en LOW\n", __func__, __LINE__);
+		if (power_info->gpio_conf->gpio_num_info) {
+			if (power_info->gpio_conf->gpio_num_info->valid[0] == 1) {
+				gpio_set_value(
+				power_info->gpio_conf->gpio_num_info->gpio_num[0],
+				GPIO_OUT_LOW);
+				CDBG("%s:%d set flash en LOW\n", __func__, __LINE__);
+			}
+			if (power_info->gpio_conf->gpio_num_info->valid[1] == 1) {
+				gpio_set_value(
+				power_info->gpio_conf->gpio_num_info->gpio_num[1],
+				GPIO_OUT_LOW);
+				CDBG("%s:%d set flash en LOW\n", __func__, __LINE__);
+			}
+		}
+
+		if (power_info->gpio_conf->cam_gpio_req_tbl) {
+			rc = msm_camera_request_gpio_table(
+				power_info->gpio_conf->cam_gpio_req_tbl,
+				power_info->gpio_conf->cam_gpio_req_tbl_size, 0);
+			if (rc < 0)
+				pr_err("%s: request gpio failed\n", __func__);
+		}
 	}
 
 	CDBG("Exit\n");
@@ -695,7 +712,7 @@ static struct msm_flash_table msm_gpio_flash_table = {
 	.flash_driver_type = FLASH_DRIVER_GPIO,
 	.func_tbl = {
 		.camera_flash_init = msm_flash_gpio_init,
-		.camera_flash_release = msm_flash_release,
+		.camera_flash_release = msm_flash_gpio_release,
 		.camera_flash_off = msm_flash_off,
 		.camera_flash_low = msm_flash_low,
 		.camera_flash_high = msm_flash_high,
