@@ -853,6 +853,8 @@ static void __iommu_sync_single_for_cpu(struct device *dev,
 		return;
 
 	phys = iommu_iova_to_phys(domain, dev_addr);
+	if (!phys)
+		return;
 	__dma_unmap_area(phys_to_virt(phys), size, dir);
 }
 
@@ -867,6 +869,8 @@ static void __iommu_sync_single_for_device(struct device *dev,
 		return;
 
 	phys = iommu_iova_to_phys(domain, dev_addr);
+	if (!phys)
+		return;
 	__dma_map_area(phys_to_virt(phys), size, dir);
 }
 
