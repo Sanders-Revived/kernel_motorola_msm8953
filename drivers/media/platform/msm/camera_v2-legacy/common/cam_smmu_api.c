@@ -86,7 +86,7 @@ struct scratch_mapping {
 
 struct cam_context_bank_info {
 	struct device *dev;
-	struct dma_iommu_mapping *mapping;
+	struct iommu_domain *domain;
 	dma_addr_t va_start;
 	size_t va_len;
 	const char *name;
@@ -523,11 +523,12 @@ static int cam_smmu_attach_device(int idx)
 {
 	int rc;
 	struct cam_context_bank_info *cb = &iommu_cb_set.cb_info[idx];
+	struct iommu_domain *domain = iommu_cb_set.cb_info[idx].domain;
 
 	/* attach the mapping to device */
-	rc = arm_iommu_attach_device(cb->dev, cb->mapping);
+	rc = iommu_attach_device(domain, cb->dev);
 	if (rc < 0) {
-		pr_err("Error: ARM IOMMU attach failed. ret = %d\n", rc);
+		pr_err("Error: IOMMU attach failed. ret = %d\n", rc);
 		return -ENODEV;
 	}
 	return rc;
@@ -790,21 +791,13 @@ static int cam_smmu_map_buffer_and_add_to_list(int idx, int ion_fd,
 		goto err_detach;
 	}
 
-	rc = msm_dma_map_sg_lazy(iommu_cb_set.cb_info[idx].dev, table->sgl,
-			table->nents, dma_dir, buf);
-	if (rc != table->nents) {
-		pr_err("Error: msm_dma_map_sg_lazy failed\n");
-		rc = -ENOMEM;
-		goto err_unmap_sg;
-	}
-
 	if (table->sgl) {
 		CDBG("DMA buf: %pK, device: %pK, attach: %pK, table: %pK\n",
 				(void *)buf,
 				(void *)iommu_cb_set.cb_info[idx].dev,
 				(void *)attach, (void *)table);
-		CDBG("table sgl: %pK, rc: %d, dma_address: 0x%x\n",
-				(void *)table->sgl, rc,
+		CDBG("table sgl: %pK, dma_address: 0x%x\n",
+				(void *)table->sgl,
 				(unsigned int)table->sgl->dma_address);
 	} else {
 		rc = -EINVAL;
@@ -824,18 +817,18 @@ static int cam_smmu_map_buffer_and_add_to_list(int idx, int ion_fd,
 	mapping_info->attach = attach;
 	mapping_info->table = table;
 	mapping_info->paddr = sg_dma_address(table->sgl);
-	mapping_info->len = (size_t)sg_dma_len(table->sgl);
+	mapping_info->len = (size_t)buf->size;
 	mapping_info->dir = dma_dir;
 	mapping_info->ref_count = 1;
 
 	/* return paddr and len to client */
 	*paddr_ptr = sg_dma_address(table->sgl);
-	*len_ptr = (size_t)sg_dma_len(table->sgl);
+	*len_ptr = (size_t)buf->size;
 
 	if (!*paddr_ptr || !*len_ptr) {
 		pr_err("Error: Space Allocation failed!\n");
 		rc = -ENOSPC;
-		goto err_unmap_sg;
+		goto err_mapping_info;
 	}
 	CDBG("ion_fd = %d, dev = %pK, paddr= %pK, len = %u\n", ion_fd,
 			(void *)iommu_cb_set.cb_info[idx].dev,
@@ -845,6 +838,8 @@ static int cam_smmu_map_buffer_and_add_to_list(int idx, int ion_fd,
 	list_add(&mapping_info->list, &iommu_cb_set.cb_info[idx].smmu_buf_list);
 	return 0;
 
+err_mapping_info:
+	kfree(mapping_info);
 err_unmap_sg:
 	dma_buf_unmap_attachment(attach, table, dma_dir);
 err_detach:
@@ -1015,7 +1010,7 @@ static int cam_smmu_alloc_scratch_buffer_add_to_list(int idx,
 
 
 	/* Get the domain from within our cb_set struct and map it*/
-	domain = iommu_cb_set.cb_info[idx].mapping->domain;
+	domain = iommu_cb_set.cb_info[idx].domain;
 
 	rc = cam_smmu_alloc_scratch_va(&iommu_cb_set.cb_info[idx].scratch_map,
 					virt_len, &iova);
@@ -1084,7 +1079,7 @@ static int cam_smmu_free_scratch_buffer_remove_from_list(
 	int rc = 0;
 	size_t unmapped;
 	struct iommu_domain *domain =
-		iommu_cb_set.cb_info[idx].mapping->domain;
+		iommu_cb_set.cb_info[idx].domain;
 	struct scratch_mapping *scratch_map =
 		&iommu_cb_set.cb_info[idx].scratch_map;
 
@@ -1416,8 +1411,8 @@ static void cam_smmu_release_cb(struct platform_device *pdev)
 	int i = 0;
 
 	for (i = 0; i < iommu_cb_set.cb_num; i++) {
-		arm_iommu_detach_device(iommu_cb_set.cb_info[i].dev);
-		arm_iommu_release_mapping(iommu_cb_set.cb_info[i].mapping);
+		iommu_detach_device(iommu_cb_set.cb_info[i].domain,
+			iommu_cb_set.cb_info[i].dev);
 	}
 
 	devm_kfree(&pdev->dev, iommu_cb_set.cb_info);
@@ -1456,11 +1451,11 @@ static int cam_smmu_setup_cb(struct cam_context_bank_info *cb,
 		cb->va_len = VA_SPACE_END - SZ_128K;
 	}
 
-	/* create a virtual mapping */
-	cb->mapping = arm_iommu_create_mapping(&platform_bus_type,
-		cb->va_start, cb->va_len);
-	if (IS_ERR(cb->mapping)) {
-		pr_err("Error: create mapping Failed\n");
+	/* get the iommu domain already attached by the ARM SMMU core */
+	cb->domain = iommu_get_domain_for_dev(cb->dev);
+	if (IS_ERR_OR_NULL(cb->domain)) {
+		pr_err("iommu get domain for dev: %s failed\n",
+			dev_name(cb->dev));
 		rc = -ENODEV;
 		goto end;
 	}
@@ -1569,7 +1564,7 @@ static int cam_populate_smmu_context_banks(struct device *dev,
 	if (rc < 0)
 		pr_err("Error: failed to setup cb : %s\n", cb->name);
 
-	iommu_set_fault_handler(cb->mapping->domain,
+	iommu_set_fault_handler(cb->domain,
 			cam_smmu_iommu_fault_handler,
 			(void *)cb->name);
 
@@ -1659,4 +1654,3 @@ module_init(cam_smmu_init_module);
 module_exit(cam_smmu_exit_module);
 MODULE_DESCRIPTION("MSM Camera SMMU driver");
 MODULE_LICENSE("GPL v2");
-
