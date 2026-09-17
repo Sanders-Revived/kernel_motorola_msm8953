@@ -1460,6 +1460,15 @@ static int cam_smmu_setup_cb(struct cam_context_bank_info *cb,
 		goto end;
 	}
 
+	if (!cb->dev->dma_parms) {
+		cb->dev->dma_parms = devm_kzalloc(cb->dev,
+			sizeof(*cb->dev->dma_parms), GFP_KERNEL);
+	}
+	if (cb->dev->dma_parms) {
+		dma_set_max_seg_size(cb->dev, DMA_BIT_MASK(32));
+		dma_set_seg_boundary(cb->dev, (unsigned long)DMA_BIT_MASK(64));
+	}
+
 	return 0;
 end:
 	return rc;
