@@ -87,6 +87,8 @@ struct scratch_mapping {
 struct cam_context_bank_info {
 	struct device *dev;
 	struct iommu_domain *domain;
+	/* SMMU core already attached via DT; do not detach what is not ours */
+	bool uses_existing_domain;
 	dma_addr_t va_start;
 	size_t va_len;
 	const char *name;
@@ -524,6 +526,18 @@ static int cam_smmu_attach_device(int idx)
 	int rc;
 	struct cam_context_bank_info *cb = &iommu_cb_set.cb_info[idx];
 	struct iommu_domain *domain = iommu_cb_set.cb_info[idx].domain;
+	struct iommu_domain *cur;
+
+	/* Reuse domain pre-attached by SMMU core (DT iommus) */
+	cur = iommu_get_domain_for_dev(cb->dev);
+	if (cur && cur == domain) {
+		return 0;
+	}
+	if (cur) {
+		cb->domain = cur;
+		cb->uses_existing_domain = true;
+		return 0;
+	}
 
 	/* attach the mapping to device */
 	rc = iommu_attach_device(domain, cb->dev);
@@ -1411,6 +1425,10 @@ static void cam_smmu_release_cb(struct platform_device *pdev)
 	int i = 0;
 
 	for (i = 0; i < iommu_cb_set.cb_num; i++) {
+		/* Never detach domain owned by SMMU core */
+		if (iommu_cb_set.cb_info[i].uses_existing_domain) {
+			continue;
+		}
 		iommu_detach_device(iommu_cb_set.cb_info[i].domain,
 			iommu_cb_set.cb_info[i].dev);
 	}
@@ -1459,6 +1477,8 @@ static int cam_smmu_setup_cb(struct cam_context_bank_info *cb,
 		rc = -ENODEV;
 		goto end;
 	}
+	/* Domain is core-owned, do not detach on release */
+	cb->uses_existing_domain = true;
 
 	if (!cb->dev->dma_parms) {
 		cb->dev->dma_parms = devm_kzalloc(cb->dev,
