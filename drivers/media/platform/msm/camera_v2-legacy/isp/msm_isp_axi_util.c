@@ -1828,7 +1828,7 @@ static struct msm_isp_buffer *msm_isp_get_stream_buffer(
 	if (rc < 0)
 		return buf;
 
-	if (buf->num_planes != stream_info->num_planes) {
+	if (!buf || buf->num_planes != stream_info->num_planes) {
 		pr_err("%s: Invalid buffer\n", __func__);
 		vfe_dev->buf_mgr->ops->put_buf(vfe_dev->buf_mgr,
 				bufq_handle, buf->buf_idx);
@@ -3256,7 +3256,7 @@ int msm_isp_cfg_axi_stream(struct vfe_device *vfe_dev, void *arg)
 	int rc = 0, ret;
 	struct msm_vfe_axi_stream_cfg_cmd *stream_cfg_cmd = arg;
 	struct msm_vfe_axi_shared_data *axi_data = &vfe_dev->axi_data;
-	enum msm_isp_camif_update_state camif_update;
+	enum msm_isp_camif_update_state camif_update = NO_UPDATE;
 	int halt = 0;
 
 	rc = msm_isp_axi_check_stream_state(vfe_dev, stream_cfg_cmd);

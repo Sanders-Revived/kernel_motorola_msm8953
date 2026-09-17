@@ -112,6 +112,9 @@ long ion_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 	{
 		struct dma_buf *dmabuf;
 
+		pr_info("[CAM-MARK] ion cache ioctl cmd=%u fd=%d off=%u len=%u pid=%d\n",
+			cmd, data.flush_data.fd, data.flush_data.offset,
+			data.flush_data.length, current->pid);
 		dmabuf = dma_buf_get(data.flush_data.fd);
 		if (IS_ERR(dmabuf))
 			return PTR_ERR(dmabuf);
@@ -142,9 +145,14 @@ long ion_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 			break;
 		}
 		dma_buf_put(dmabuf);
+		if (ret)
+			pr_err("[CAM-MARK] ion cache ioctl cmd=%u FAILED ret=%d\n",
+				cmd, ret);
 		break;
 	}
 	case ION_IOC_CUSTOM:
+		pr_info("[CAM-MARK] ion CUSTOM cmd=%u arg=%lu pid=%d\n",
+			data.custom.cmd, data.custom.arg, current->pid);
 		return ion_ioctl(filp, data.custom.cmd, data.custom.arg);
 	case ION_IOC_PREFETCH:
 	{

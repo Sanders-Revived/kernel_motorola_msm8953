@@ -123,11 +123,13 @@ static int32_t msm_flash_gpio_init(
 	CDBG("%s:%d called\n", __func__, __LINE__);
 	power_info = &flash_ctrl->power_info;
 	CDBG("Enter request_gpio\n");
+	pr_info("[CAM-MARK] flash_gpio_init E state=%d pid=%d\n",
+		flash_ctrl->flash_state, current->pid);
 	rc = msm_camera_request_gpio_table(
 		power_info->gpio_conf->cam_gpio_req_tbl,
 		power_info->gpio_conf->cam_gpio_req_tbl_size, 1);
 	if (rc < 0) {
-		pr_warn("%s: request gpio returned %d, continuing\n", __func__, rc);
+		pr_warn("[CAM-MARK] flash_gpio_init: request gpio %d, continuing\n", rc);
 	}
 	rc = flash_ctrl->func_tbl->camera_flash_off(flash_ctrl, flash_data);
 	CDBG("Exit");
@@ -317,6 +319,8 @@ static int32_t msm_flash_gpio_release(
 			__func__, __LINE__);
 		return 0;
 	}
+	pr_info("[CAM-MARK] flash_gpio_release E state=%d pid=%d\n",
+		flash_ctrl->flash_state, current->pid);
 
 	if (power_info->gpio_conf) {
 		if (power_info->gpio_conf->cam_gpiomux_conf_tbl != NULL)

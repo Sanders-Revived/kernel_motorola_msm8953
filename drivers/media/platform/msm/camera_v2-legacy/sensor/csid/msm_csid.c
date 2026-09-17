@@ -242,6 +242,9 @@ static int msm_csid_reset(struct csid_device *csid_dev)
 		csid_dev->ctrl_reg->csid_reg.csid_rst_cmd_addr);
 	rc = wait_for_completion_timeout(&csid_dev->reset_complete,
 		CSID_TIMEOUT);
+	if (rc == 0)
+		pr_err("[CAM-MARK] csid%d reset TIMEOUT (500ms) status check\n",
+			csid_dev->pdev->id);
 	if (rc < 0) {
 		pr_err("wait_for_completion in msm_csid_reset fail rc = %d\n",
 			rc);
