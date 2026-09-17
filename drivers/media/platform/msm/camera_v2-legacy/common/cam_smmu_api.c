@@ -523,13 +523,12 @@ static int cam_smmu_attach_device(int idx)
 {
 	int rc;
 	struct cam_context_bank_info *cb = &iommu_cb_set.cb_info[idx];
-	struct iommu_domain *domain =
-		iommu_cb_set.cb_info[idx].domain;
+	struct iommu_domain *domain = iommu_cb_set.cb_info[idx].domain;
 
 	/* attach the mapping to device */
 	rc = iommu_attach_device(domain, cb->dev);
 	if (rc < 0) {
-		pr_err("Error: ARM IOMMU attach failed. ret = %d\n", rc);
+		pr_err("Error: IOMMU attach failed. ret = %d\n", rc);
 		return -ENODEV;
 	}
 	return rc;
@@ -797,8 +796,8 @@ static int cam_smmu_map_buffer_and_add_to_list(int idx, int ion_fd,
 				(void *)buf,
 				(void *)iommu_cb_set.cb_info[idx].dev,
 				(void *)attach, (void *)table);
-		CDBG("table sgl: %pK, rc: %d, dma_address: 0x%x\n",
-				(void *)table->sgl, rc,
+		CDBG("table sgl: %pK, dma_address: 0x%x\n",
+				(void *)table->sgl,
 				(unsigned int)table->sgl->dma_address);
 	} else {
 		rc = -EINVAL;
@@ -829,7 +828,7 @@ static int cam_smmu_map_buffer_and_add_to_list(int idx, int ion_fd,
 	if (!*paddr_ptr || !*len_ptr) {
 		pr_err("Error: Space Allocation failed!\n");
 		rc = -ENOSPC;
-		goto err_unmap_sg;
+		goto err_mapping_info;
 	}
 	CDBG("ion_fd = %d, dev = %pK, paddr= %pK, len = %u\n", ion_fd,
 			(void *)iommu_cb_set.cb_info[idx].dev,
@@ -839,6 +838,8 @@ static int cam_smmu_map_buffer_and_add_to_list(int idx, int ion_fd,
 	list_add(&mapping_info->list, &iommu_cb_set.cb_info[idx].smmu_buf_list);
 	return 0;
 
+err_mapping_info:
+	kfree(mapping_info);
 err_unmap_sg:
 	dma_buf_unmap_attachment(attach, table, dma_dir);
 err_detach:
@@ -1450,13 +1451,22 @@ static int cam_smmu_setup_cb(struct cam_context_bank_info *cb,
 		cb->va_len = VA_SPACE_END - SZ_128K;
 	}
 
-	/* create a virtual mapping */
+	/* get the iommu domain already attached by the ARM SMMU core */
 	cb->domain = iommu_get_domain_for_dev(cb->dev);
-	if (IS_ERR(cb->domain)) {
+	if (IS_ERR_OR_NULL(cb->domain)) {
 		pr_err("iommu get domain for dev: %s failed\n",
 			dev_name(cb->dev));
 		rc = -ENODEV;
 		goto end;
+	}
+
+	if (!cb->dev->dma_parms) {
+		cb->dev->dma_parms = devm_kzalloc(cb->dev,
+			sizeof(*cb->dev->dma_parms), GFP_KERNEL);
+	}
+	if (cb->dev->dma_parms) {
+		dma_set_max_seg_size(cb->dev, DMA_BIT_MASK(32));
+		dma_set_seg_boundary(cb->dev, (unsigned long)DMA_BIT_MASK(64));
 	}
 
 	return 0;
@@ -1653,4 +1663,3 @@ module_init(cam_smmu_init_module);
 module_exit(cam_smmu_exit_module);
 MODULE_DESCRIPTION("MSM Camera SMMU driver");
 MODULE_LICENSE("GPL v2");
-
