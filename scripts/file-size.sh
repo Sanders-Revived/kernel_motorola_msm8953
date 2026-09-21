@@ -1,4 +1,4 @@
 #!/bin/sh
 # SPDX-License-Identifier: GPL-2.0
-set -- $(ls -dn "$1")
-printf '%s\n' "$5"
+# Optimized: use stat(1) instead of ls -dn to avoid fork overhead
+stat -c %s "$1"
