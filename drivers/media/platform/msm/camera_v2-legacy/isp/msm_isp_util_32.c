@@ -13,6 +13,7 @@
 #include <linux/io.h>
 #include <media/v4l2-subdev.h>
 #include <linux/ratelimit.h>
+#include <linux/sched/clock.h>
 
 #include "msm.h"
 #include "msm_isp_util_32.h"
