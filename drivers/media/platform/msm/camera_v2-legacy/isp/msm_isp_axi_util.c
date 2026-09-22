@@ -1049,9 +1049,6 @@ void msm_isp_notify(struct vfe_device *vfe_dev, uint32_t event_type,
 		ISP_DBG("%s: vfe %d frame_src %d frame id: %u\n", __func__,
 			vfe_dev->pdev->id, frame_src,
 			vfe_dev->axi_data.src_info[frame_src].frame_id);
-		trace_msm_cam_isp_bufcount("msm_isp_notify:",
-		vfe_dev->pdev->id,
-		vfe_dev->axi_data.src_info[frame_src].frame_id, frame_src);
 
 		/*
 		 * Cannot support dual_cam and framedrop same time in union.
@@ -1830,7 +1827,7 @@ static struct msm_isp_buffer *msm_isp_get_stream_buffer(
 	if (rc < 0)
 		return buf;
 
-	if (buf && buf->num_planes != stream_info->num_planes) {
+	if (buf->num_planes != stream_info->num_planes) {
 		pr_err("%s: Invalid buffer\n", __func__);
 		vfe_dev->buf_mgr->ops->put_buf(vfe_dev->buf_mgr,
 				bufq_handle, buf->buf_idx);
@@ -2161,9 +2158,6 @@ static int msm_isp_process_done_buf(struct vfe_device *vfe_dev,
 		}
 	}
 
-	trace_msm_cam_isp_bufcount("msm_isp_process_done_buf:",
-		vfe_dev->pdev->id, frame_id,
-		SRC_TO_INTF(stream_info->stream_src));
 
 	buf_event.frame_id = frame_id;
 	buf_event.timestamp = *time_stamp;
@@ -3261,7 +3255,7 @@ int msm_isp_cfg_axi_stream(struct vfe_device *vfe_dev, void *arg)
 	int rc = 0, ret;
 	struct msm_vfe_axi_stream_cfg_cmd *stream_cfg_cmd = arg;
 	struct msm_vfe_axi_shared_data *axi_data = &vfe_dev->axi_data;
-	enum msm_isp_camif_update_state camif_update = ENABLE_CAMIF;
+	enum msm_isp_camif_update_state camif_update;
 	int halt = 0;
 
 	rc = msm_isp_axi_check_stream_state(vfe_dev, stream_cfg_cmd);
@@ -3359,7 +3353,7 @@ static int msm_isp_return_empty_buffer(struct vfe_device *vfe_dev,
 	buf->buf_debug.put_state[buf->buf_debug.put_state_last] =
 		MSM_ISP_BUFFER_STATE_DROP_REG;
 	buf->buf_debug.put_state_last ^= 1;
-	rc = vfe_dev->buf_mgr->ops->buf_done(vfe_dev->buf_mgr,
+	rc = vfe_dev->buf_mgr->ops->buf_err(vfe_dev->buf_mgr,
 		buf->bufq_handle, buf->buf_idx,
 		&timestamp.buf_time, frame_id,
 		stream_info->runtime_output_format);
@@ -3419,18 +3413,6 @@ static int msm_isp_request_frame(struct vfe_device *vfe_dev,
 	}
 
 	frame_src = SRC_TO_INTF(stream_info->stream_src);
-	if (vfe_dev->isp_page->drop_reconfig) {
-		pr_err("%s: MCT has not yet delayed %d drop request %d\n",
-			__func__, vfe_dev->isp_page->drop_reconfig, frame_id);
-		rc = msm_isp_return_empty_buffer(vfe_dev, stream_info,
-                        user_stream_id, frame_id, buf_index, frame_src);
-                if (rc < 0)
-                        pr_err("%s:%d failed: return_empty_buffer src %d\n",
-                                __func__, __LINE__, frame_src);
-                return 0;
-	}
-	trace_msm_cam_isp_bufcount("msm_isp_request_frame:",
-		vfe_dev->pdev->id, frame_id, frame_src);
 
 	/*
 	 * If frame_id = 1 then no eof check is needed
