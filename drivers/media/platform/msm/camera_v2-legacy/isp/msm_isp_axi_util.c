@@ -14,7 +14,6 @@
 #include <asm/div64.h>
 #include "msm_isp_util.h"
 #include "msm_isp_axi_util.h"
-#include "trace/events/msm_cam-legacy.h"
 
 
 #define ISP_SOF_DEBUG_COUNT 0
