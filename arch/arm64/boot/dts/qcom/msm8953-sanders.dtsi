@@ -822,6 +822,7 @@ reserved-memory {
 };
 
 &wled {
+	linux,name = "lcd-backlight";
 	qcom,fs-curr-ua = <25000>;
 	qcom,cons-sync-write-delay-us = <1000>;
 	qcom,en-cabc;
