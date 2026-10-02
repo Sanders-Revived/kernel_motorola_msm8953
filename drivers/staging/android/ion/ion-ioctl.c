@@ -116,30 +116,52 @@ long ion_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		if (IS_ERR(dmabuf))
 			return PTR_ERR(dmabuf);
 
-		switch (cmd) {
-		case ION_IOC_CLEAN_CACHES:
-			ret = dma_buf_end_cpu_access_partial(dmabuf,
-							     DMA_TO_DEVICE,
-							     data.flush_data.offset,
-							     data.flush_data.length);
-			break;
-		case ION_IOC_INV_CACHES:
-			ret = dma_buf_begin_cpu_access_partial(dmabuf,
-							       DMA_FROM_DEVICE,
-							       data.flush_data.offset,
-							       data.flush_data.length);
-			break;
-		case ION_IOC_CLEAN_INV_CACHES:
-			ret = dma_buf_end_cpu_access_partial(dmabuf,
-							     DMA_TO_DEVICE,
-							     data.flush_data.offset,
-							     data.flush_data.length);
-			if (!ret)
+		if (data.flush_data.offset == 0 &&
+		    (data.flush_data.length == 0 ||
+		     data.flush_data.length >= dmabuf->size)) {
+			switch (cmd) {
+			case ION_IOC_CLEAN_CACHES:
+				ret = dma_buf_end_cpu_access(dmabuf,
+							     DMA_TO_DEVICE);
+				break;
+			case ION_IOC_INV_CACHES:
+				ret = dma_buf_begin_cpu_access(dmabuf,
+							       DMA_FROM_DEVICE);
+				break;
+			case ION_IOC_CLEAN_INV_CACHES:
+				ret = dma_buf_end_cpu_access(dmabuf,
+							     DMA_TO_DEVICE);
+				if (!ret)
+					ret = dma_buf_begin_cpu_access(dmabuf,
+								       DMA_FROM_DEVICE);
+				break;
+			}
+		} else {
+			switch (cmd) {
+			case ION_IOC_CLEAN_CACHES:
+				ret = dma_buf_end_cpu_access_partial(dmabuf,
+								     DMA_TO_DEVICE,
+								     data.flush_data.offset,
+								     data.flush_data.length);
+				break;
+			case ION_IOC_INV_CACHES:
 				ret = dma_buf_begin_cpu_access_partial(dmabuf,
 								       DMA_FROM_DEVICE,
 								       data.flush_data.offset,
 								       data.flush_data.length);
-			break;
+				break;
+			case ION_IOC_CLEAN_INV_CACHES:
+				ret = dma_buf_end_cpu_access_partial(dmabuf,
+								     DMA_TO_DEVICE,
+								     data.flush_data.offset,
+								     data.flush_data.length);
+				if (!ret)
+					ret = dma_buf_begin_cpu_access_partial(dmabuf,
+									       DMA_FROM_DEVICE,
+									       data.flush_data.offset,
+									       data.flush_data.length);
+				break;
+			}
 		}
 		dma_buf_put(dmabuf);
 		break;
