@@ -669,3 +669,4 @@ config OKL4_LINK_SHBUF
 	      on the device is used to send a virtual interrupt to the partner cell.
 
 source "drivers/misc/utag/Kconfig"
+source "drivers/misc/moto-dtv/Kconfig"

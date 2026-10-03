@@ -79,3 +79,4 @@ obj-$(CONFIG_FPR_FPC)		+= fpr_FingerprintCard/
 obj-y                           += qrc/
 obj-$(CONFIG_KINECTICS_XR_NORDIC) += kxrctrl/
 obj-$(CONFIG_MOTO_UTAG) += utag/
+obj-$(CONFIG_MOTO_DTV_FC8300) += moto-dtv/
