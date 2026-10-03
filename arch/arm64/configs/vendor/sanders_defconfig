@@ -58,7 +58,7 @@ CONFIG_ARM64_SW_TTBR0_PAN=y
 # CONFIG_ARM64_VHE is not set
 CONFIG_RANDOMIZE_BASE=y
 CONFIG_RELR=y
-CONFIG_CMDLINE="cgroup_disable=pressure"
+CONFIG_CMDLINE="cgroup_disable=pressure dyndbg=\"file drivers/char/diag/* +p; file drivers/char/msm_smd_pkt.c +p; file drivers/rpmsg/qcom_* +p; file drivers/soc/qcom/*qmi* +p; file drivers/soc/qcom/*glink* +p; file drivers/soc/qcom/*pil* +p; file drivers/soc/qcom/*subsys* +p; file drivers/soc/qcom/*sysmon* +p; file drivers/soc/qcom/smsm.c +p; file drivers/soc/qcom/bam_dmux.c +p; file drivers/soc/qcom/spcom.c +p; file drivers/soc/qcom/peripheral-loader.c +p; file drivers/soc/qcom/smd-rpm.c +p; file drivers/remoteproc/qcom_q6v5* +p; file drivers/remoteproc/qcom_common.c +p; file drivers/remoteproc/qcom_sysmon.c +p; file net/qrtr/* +p; file net/rmnet_data/* +p; file drivers/net/ethernet/qualcomm/rmnet/* +p; file drivers/platform/msm/ipa/* +p\""
 CONFIG_CMDLINE_EXTEND=y
 CONFIG_COMPAT=y
 CONFIG_PM_WAKELOCKS=y
@@ -649,6 +649,7 @@ CONFIG_CRYPTO_DEV_QCEDEV=y
 CONFIG_CRYPTO_DEV_QCOM_ICE=y
 CONFIG_PRINTK_TIME=y
 CONFIG_DEBUG_FS=y
+CONFIG_DYNAMIC_DEBUG=y
 CONFIG_MAGIC_SYSRQ=y
 CONFIG_PANIC_TIMEOUT=5
 CONFIG_SCHEDSTATS=y
