@@ -78,6 +78,13 @@ config LEDS_AS3645A
 	  controller. V4L2 flash API is provided as well if
 	  CONFIG_V4L2_FLASH_API is enabled.
 
+config LEDS_ATC
+	tristate "Support for PMIC ATC LED"
+	depends on LEDS_CLASS
+	depends on SPMI
+	help
+	  This option enables support for the ATC LED on Qualcomm PMIC.
+
 config LEDS_AW2016
 	tristate "LED Support for AW2016"
 	depends on LEDS_CLASS && I2C
