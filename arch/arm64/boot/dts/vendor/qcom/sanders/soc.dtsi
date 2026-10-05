@@ -3,6 +3,19 @@
 };
 
 &soc {
+	/* Sanders KGSL OPPs required by devfreq_add_device(). */
+	sanders_gpu_opp_tbl: gpu-opp-tbl-sanders {
+		compatible = "operating-points-v2";
+
+		opp-133300000 { opp-hz = /bits/ 64 <133300000>; };
+		opp-216000000 { opp-hz = /bits/ 64 <216000000>; };
+		opp-320000000 { opp-hz = /bits/ 64 <320000000>; };
+		opp-400000000 { opp-hz = /bits/ 64 <400000000>; };
+		opp-510000000 { opp-hz = /bits/ 64 <510000000>; };
+		opp-560000000 { opp-hz = /bits/ 64 <560000000>; };
+		opp-650000000 { opp-hz = /bits/ 64 <650000000>; };
+	};
+
 	restart@4ab000 {
 		qcom,force-warm-reboot;
 	};
@@ -10,6 +23,10 @@
 	qcom,lpm-levels {
 		qcom,use-psci;
 	};
+};
+
+&msm_gpu {
+	operating-points-v2 = <&sanders_gpu_opp_tbl>;
 };
 
 &qcom_seecom {
