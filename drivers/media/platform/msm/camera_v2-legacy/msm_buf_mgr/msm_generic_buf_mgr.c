@@ -356,6 +356,8 @@ static int msm_buf_mngr_handle_cont_cmd(struct msm_buf_mngr_device *dev,
 					*cont_cmd)
 {
 	int rc = 0, i = 0;
+	int end_rc;
+	bool cpu_access = false;
 	struct dma_buf *dmabuf = NULL;
 	struct msm_camera_user_buf_cont_t *iaddr, *temp_addr;
 	struct msm_buf_mngr_user_buf_cont_info *new_entry, *bufs, *save;
@@ -405,13 +407,14 @@ static int msm_buf_mngr_handle_cont_cmd(struct msm_buf_mngr_device *dev,
 		rc = dma_buf_begin_cpu_access(dmabuf, DMA_BIDIRECTIONAL);
 		if (rc) {
 			pr_err("dma begin access failed rc=%d\n", rc);
-			return rc;
+			goto free_ion_handle;
 		}
+		cpu_access = true;
 		iaddr = dma_buf_vmap(dmabuf);
 		if (IS_ERR_OR_NULL(iaddr)) {
 			pr_err("dma_buf_vmap failed\n");
 			rc = -EINVAL;
-			goto free_ion_handle;
+			goto end_cpu_access;
 		}
 		for (i = 0; i < cont_cmd->cnt; i++) {
 			temp_addr = iaddr + i;
@@ -461,10 +464,15 @@ free_list:
 		}
 	}
 	dma_buf_vunmap(dmabuf, iaddr);
-	rc = dma_buf_end_cpu_access(dmabuf, DMA_BIDIRECTIONAL);
-	if (rc) {
-		pr_err("Failed in end cpu access, dmabuf=%pK\n", dmabuf);
-		return rc;
+
+end_cpu_access:
+	if (cpu_access) {
+		end_rc = dma_buf_end_cpu_access(dmabuf, DMA_BIDIRECTIONAL);
+		if (end_rc) {
+			pr_err("Failed in end cpu access, dmabuf=%pK\n", dmabuf);
+			if (!rc)
+				rc = end_rc;
+		}
 	}
 free_ion_handle:
 	dma_buf_put(dmabuf);
