@@ -179,13 +179,24 @@ static int32_t msm_buf_mngr_buf_error(struct msm_buf_mngr_device *buf_mngr_dev,
 		if ((bufs->session_id == buf_info->session_id) &&
 			(bufs->stream_id == buf_info->stream_id) &&
 			(bufs->index == buf_info->index)) {
-			ret = buf_mngr_dev->vb2_ops.buf_error
+			if (buf_mngr_dev->vb2_ops.buf_error)
+				ret = buf_mngr_dev->vb2_ops.buf_error
 								(bufs->vb2_v4l2_buf,
 									buf_info->session_id,
 									buf_info->stream_id,
 									buf_info->frame_id,
 									&buf_info->timestamp,
 									buf_info->reserved);
+			else if (buf_mngr_dev->vb2_ops.buf_done)
+				ret = buf_mngr_dev->vb2_ops.buf_done
+								(bufs->vb2_v4l2_buf,
+									buf_info->session_id,
+									buf_info->stream_id,
+									buf_info->frame_id,
+									&buf_info->timestamp,
+									buf_info->reserved);
+			else
+				pr_err("%s: no vb2 buf_error/buf_done registered\n", __func__);
 			list_del_init(&bufs->entry);
 			kfree(bufs);
 			break;

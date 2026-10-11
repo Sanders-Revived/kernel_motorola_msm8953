@@ -1828,10 +1828,14 @@ error:
 
 static void cpp_timer_callback(struct timer_list *cpp_t)
 {
-	struct msm_cpp_work_t *work =
-		cpp_timer.data.cpp_dev->work;
-	queue_work(cpp_timer.data.cpp_dev->timer_wq,
-		(struct work_struct *)work);
+	struct msm_cpp_work_t *work;
+
+	if (!cpp_timer.data.cpp_dev)
+		return;
+	work = cpp_timer.data.cpp_dev->work;
+	if (work && cpp_timer.data.cpp_dev->timer_wq)
+		queue_work(cpp_timer.data.cpp_dev->timer_wq,
+			(struct work_struct *)work);
 }
 
 static int msm_cpp_send_frame_to_hardware(struct cpp_device *cpp_dev,
