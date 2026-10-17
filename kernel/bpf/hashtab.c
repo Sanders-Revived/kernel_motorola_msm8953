@@ -756,12 +756,18 @@ static struct htab_elem *alloc_htab_elem(struct bpf_htab *htab, void *key,
 	if (prealloc) {
 		if (old_elem) {
 			/* if we're updating the existing element,
-			 * use per-cpu extra elems to avoid freelist_pop/push
+			 * use per-cpu extra elems to avoid freelist_pop/push.
+			 * The caller puts old_elem into the slot once it is
+			 * unlinked. Until then the slot is empty for an NMI
+			 * or a kprobe that updates this map on this cpu.
 			 */
 			pl_new = this_cpu_ptr(htab->extra_elems);
-			l_new = *pl_new;
+			do {
+				l_new = READ_ONCE(*pl_new);
+				if (!l_new)
+					return ERR_PTR(-EBUSY);
+			} while (cmpxchg_local(pl_new, l_new, NULL) != l_new);
 			htab_put_fd_value(htab, old_elem);
-			*pl_new = old_elem;
 		} else {
 			struct pcpu_freelist_node *l;
 
@@ -925,7 +931,10 @@ static int htab_map_update_elem(struct bpf_map *map, void *key, void *value,
 	hlist_nulls_add_head_rcu(&l_new->hash_node, head);
 	if (l_old) {
 		hlist_nulls_del_rcu(&l_old->hash_node);
-		if (!htab_is_prealloc(htab))
+		/* l_old replaces the extra element that alloc_htab_elem() took */
+		if (htab_is_prealloc(htab))
+			WRITE_ONCE(*this_cpu_ptr(htab->extra_elems), l_old);
+		else
 			free_htab_elem(htab, l_old);
 	}
 	ret = 0;
