@@ -482,6 +482,10 @@ unsigned long read_word_at_a_time(const void *addr)
 # define __section(S) __attribute__ ((__section__(#S)))
 #endif
 
+#ifndef __annotate_jump_table
+# define __annotate_jump_table
+#endif
+
 #ifndef __no_fgcse
 # define __no_fgcse
 #endif

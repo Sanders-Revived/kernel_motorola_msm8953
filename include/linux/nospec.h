@@ -7,6 +7,13 @@
 #define _LINUX_NOSPEC_H
 #include <asm/barrier.h>
 
+/**
+ * barrier_nospec() - Prevent speculation (upstream fallback; no-op on arm64)
+ */
+#ifndef barrier_nospec
+# define barrier_nospec() do { } while (0)
+#endif
+
 struct task_struct;
 
 /**

@@ -136,7 +136,7 @@ void *bpf_map_area_alloc(u64 size, int numa_node)
 	 * It has been observed that higher order allocation requests done by
 	 * vmalloc with __GFP_NORETRY being set might fail due to not trying
 	 * to reclaim memory from the page cache, thus we set
-	 * __GFP_RETRY_MAYFAIL to avoid such situations.
+	 * __GFP_REPEAT to avoid such situations.
 	 */
 
 	const gfp_t flags = __GFP_NOWARN | __GFP_ZERO;
@@ -153,7 +153,7 @@ void *bpf_map_area_alloc(u64 size, int numa_node)
 	}
 
 	return __vmalloc_node_flags_caller(size, numa_node,
-					   GFP_KERNEL | __GFP_RETRY_MAYFAIL |
+					   GFP_KERNEL | __GFP_REPEAT |
 					   flags, __builtin_return_address(0));
 }
 

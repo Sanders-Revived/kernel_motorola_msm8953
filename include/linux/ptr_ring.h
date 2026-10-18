@@ -242,6 +242,8 @@ static inline void __ptr_ring_discard_one(struct ptr_ring *r)
 		r->consumer = 0;
 }
 
+static inline int __ptr_ring_consume_batched(struct ptr_ring *r,
+					     void **array, int n);
 static inline void *__ptr_ring_consume(struct ptr_ring *r)
 {
 	void *ptr;
@@ -270,6 +272,34 @@ static inline void *ptr_ring_consume(struct ptr_ring *r)
 	spin_unlock(&r->consumer_lock);
 
 	return ptr;
+}
+
+static inline int __ptr_ring_consume_batched(struct ptr_ring *r,
+					     void **array, int n)
+{
+	void *ptr;
+	int i;
+
+	for (i = 0; i < n; i++) {
+		ptr = __ptr_ring_consume(r);
+		if (!ptr)
+			break;
+		array[i] = ptr;
+	}
+
+	return i;
+}
+
+static inline int ptr_ring_consume_batched(struct ptr_ring *r,
+					   void **array, int n)
+{
+	int ret;
+
+	spin_lock(&r->consumer_lock);
+	ret = __ptr_ring_consume_batched(r, array, n);
+	spin_unlock(&r->consumer_lock);
+
+	return ret;
 }
 
 static inline void *ptr_ring_consume_irq(struct ptr_ring *r)

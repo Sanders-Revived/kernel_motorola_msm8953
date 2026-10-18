@@ -339,7 +339,7 @@ static void __xdp_return(void *data, struct xdp_mem_info *mem, bool napi_direct,
 		rcu_read_unlock();
 		break;
 	case MEM_TYPE_PAGE_SHARED:
-		page_frag_free(data);
+		__free_page_frag(data);
 		break;
 	case MEM_TYPE_PAGE_ORDER0:
 		page = virt_to_page(data); /* Assumes order0 page*/

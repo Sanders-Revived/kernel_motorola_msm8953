@@ -1644,6 +1644,9 @@ extern int vfs_create2(struct vfsmount *, struct inode *, struct dentry *, umode
 extern int vfs_mkdir(struct inode *, struct dentry *, umode_t);
 extern int vfs_mkdir2(struct vfsmount *, struct inode *, struct dentry *, umode_t);
 extern int vfs_mknod(struct inode *, struct dentry *, umode_t, dev_t);
+int vfs_mkobj(struct dentry *, umode_t,
+		int (*)(struct dentry *, umode_t, void *),
+		void *);
 extern int vfs_mknod2(struct vfsmount *, struct inode *, struct dentry *, umode_t, dev_t);
 extern int vfs_symlink(struct inode *, struct dentry *, const char *);
 extern int vfs_symlink2(struct vfsmount *, struct inode *, struct dentry *, const char *);

@@ -70,9 +70,11 @@
 #include <net/arp.h>
 #include <net/ipv6.h>
 #include <net/net_namespace.h>
+#if IS_ENABLED(CONFIG_IPV6_SEG6_BPF)
 #include <linux/seg6_local.h>
 #include <net/seg6.h>
 #include <net/seg6_local.h>
+#endif
 #include <net/lwtunnel.h>
 #include <net/bpf_sk_storage.h>
 
@@ -5269,11 +5271,11 @@ static struct sock *sk_lookup(struct net *net, struct bpf_sock_tuple *tuple,
 			sk = __inet_lookup(net, &tcp_hashinfo, NULL, 0,
 					   src4, tuple->ipv4.sport,
 					   dst4, tuple->ipv4.dport,
-					   dif, sdif, &refcounted);
+					   dif, &refcounted);
 		else
 			sk = __udp4_lib_lookup(net, src4, tuple->ipv4.sport,
 					       dst4, tuple->ipv4.dport,
-					       dif, sdif, &udp_table, NULL);
+					       dif, &udp_table, NULL);
 #if IS_ENABLED(CONFIG_IPV6)
 	} else {
 		struct in6_addr *src6 = (struct in6_addr *)&tuple->ipv6.saddr;
@@ -5283,12 +5285,12 @@ static struct sock *sk_lookup(struct net *net, struct bpf_sock_tuple *tuple,
 			sk = __inet6_lookup(net, &tcp_hashinfo, NULL, 0,
 					    src6, tuple->ipv6.sport,
 					    dst6, ntohs(tuple->ipv6.dport),
-					    dif, sdif, &refcounted);
+					    dif, &refcounted);
 		else if (likely(ipv6_bpf_stub))
 			sk = ipv6_bpf_stub->udp6_lib_lookup(net,
 							    src6, tuple->ipv6.sport,
 							    dst6, tuple->ipv6.dport,
-							    dif, sdif,
+							    dif,
 							    &udp_table, NULL);
 #endif
 	}
@@ -5326,10 +5328,8 @@ __bpf_skc_lookup(struct sk_buff *skb, struct bpf_sock_tuple *tuple, u32 len,
 		     !((s32)netns_id < 0 || netns_id <= S32_MAX)))
 		goto out;
 
-	if (family == AF_INET)
-		sdif = inet_sdif(skb);
-	else
-		sdif = inet6_sdif(skb);
+	/* No l3mdev slave ifindex (sdif) in 4.9 */
+	sdif = 0;
 
 	if ((s32)netns_id < 0) {
 		net = caller_net;
