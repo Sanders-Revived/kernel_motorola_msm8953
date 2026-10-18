@@ -1898,7 +1898,6 @@ static struct vb2_buffer *get_vb_from_device_addr(struct buf_queue *bufq,
 		return NULL;
 	}
 	q = &bufq->vb2_bufq;
-	mutex_lock(&bufq->lock);
 	list_for_each_entry(vb, &q->queued_list, queued_entry) {
 		if (vb->planes[0].m.userptr == dev_addr &&
 			vb->state == VB2_BUF_STATE_ACTIVE) {
@@ -1908,7 +1907,6 @@ static struct vb2_buffer *get_vb_from_device_addr(struct buf_queue *bufq,
 			break;
 		}
 	}
-	mutex_unlock(&bufq->lock);
 	if (!found) {
 		dprintk(VIDC_DBG,
 			"Failed to find buffer in queued list: %#lx, qtype = %d\n",
@@ -1959,6 +1957,7 @@ static void handle_ebd(enum hal_command_response cmd, void *data)
 		return;
 	}
 
+	mutex_lock(&inst->bufq[OUTPUT_PORT].lock);
 	vb = get_vb_from_device_addr(&inst->bufq[OUTPUT_PORT],
 			response->input_done.packet_buffer);
 	if (vb) {
@@ -1977,6 +1976,7 @@ static void handle_ebd(enum hal_command_response cmd, void *data)
 		if (is_eos_buffer(inst, empty_buf_done->packet_buffer)) {
 			dprintk(VIDC_DBG, "Received EOS buffer %pK\n",
 				(void *)empty_buf_done->packet_buffer);
+			mutex_unlock(&inst->bufq[OUTPUT_PORT].lock);
 			goto exit;
 		}
 
@@ -2011,10 +2011,11 @@ static void handle_ebd(enum hal_command_response cmd, void *data)
 			empty_buf_done->alloc_len, empty_buf_done->status,
 			empty_buf_done->picture_type, empty_buf_done->flags);
 
-		mutex_lock(&inst->bufq[OUTPUT_PORT].lock);
 		vb2_buffer_done(vb, VB2_BUF_STATE_DONE);
 		mutex_unlock(&inst->bufq[OUTPUT_PORT].lock);
 		msm_vidc_debugfs_update(inst, MSM_VIDC_DEBUGFS_EVENT_EBD);
+	} else {
+		mutex_unlock(&inst->bufq[OUTPUT_PORT].lock);
 	}
 exit:
 	put_inst(inst);
@@ -2195,10 +2196,12 @@ static void handle_fbd(enum hal_command_response cmd, void *data)
 
 	fill_buf_done = (struct vidc_hal_fbd *)&response->output_done;
 	buffer_type = msm_comm_get_hal_output_buffer(inst);
+	mutex_lock(&inst->bufq[CAPTURE_PORT].lock);
 	if (fill_buf_done->buffer_type == buffer_type) {
 		vb = get_vb_from_device_addr(&inst->bufq[CAPTURE_PORT],
 				fill_buf_done->packet_buffer1);
 	} else {
+		mutex_unlock(&inst->bufq[CAPTURE_PORT].lock);
 		if (handle_multi_stream_buffers(inst,
 				fill_buf_done->packet_buffer1))
 			dprintk(VIDC_ERR,
@@ -2229,7 +2232,8 @@ static void handle_fbd(enum hal_command_response cmd, void *data)
 			dprintk(VIDC_ERR,
 				"%s buffer not found in registered list\n",
 				__func__);
-			return;
+			mutex_unlock(&inst->bufq[CAPTURE_PORT].lock);
+			goto err_handle_fbd;
 		}
 
 		buffer_info->crop_data.nLeft = fill_buf_done->start_x_coord;
@@ -2338,11 +2342,10 @@ static void handle_fbd(enum hal_command_response cmd, void *data)
 		fill_buf_done->frame_height, fill_buf_done->picture_type,
 		fill_buf_done->mark_data);
 
-		mutex_lock(&inst->bufq[CAPTURE_PORT].lock);
 		vb2_buffer_done(vb, VB2_BUF_STATE_DONE);
-		mutex_unlock(&inst->bufq[CAPTURE_PORT].lock);
 		msm_vidc_debugfs_update(inst, MSM_VIDC_DEBUGFS_EVENT_FBD);
 	}
+	mutex_unlock(&inst->bufq[CAPTURE_PORT].lock);
 
 err_handle_fbd:
 	put_inst(inst);
@@ -2369,12 +2372,14 @@ static void handle_seq_hdr_done(enum hal_command_response cmd, void *data)
 	}
 
 	fill_buf_done = (struct vidc_hal_fbd *)&response->output_done;
+	mutex_lock(&inst->bufq[CAPTURE_PORT].lock);
 	vb = get_vb_from_device_addr(&inst->bufq[CAPTURE_PORT],
 				fill_buf_done->packet_buffer1);
 	if (!vb) {
 		dprintk(VIDC_ERR,
 				"Failed to find video buffer for seq_hdr_done: %pa\n",
 				&fill_buf_done->packet_buffer1);
+		mutex_unlock(&inst->bufq[CAPTURE_PORT].lock);
 		goto err_seq_hdr_done;
 	}
 	vbuf = to_vb2_v4l2_buffer(vb);
@@ -2388,7 +2393,6 @@ static void handle_seq_hdr_done(enum hal_command_response cmd, void *data)
 				vb->planes[0].bytesused,
 				vb->planes[0].data_offset,
 				vbuf->flags);
-	mutex_lock(&inst->bufq[CAPTURE_PORT].lock);
 	vb2_buffer_done(vb, VB2_BUF_STATE_DONE);
 	mutex_unlock(&inst->bufq[CAPTURE_PORT].lock);
 

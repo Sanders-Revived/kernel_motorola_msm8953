@@ -282,7 +282,7 @@ struct buffer_info *device_to_uvaddr(struct msm_vidc_list *buf_list,
 	mutex_unlock(&buf_list->lock);
 
 err_invalid_input:
-	return temp;
+	return found ? temp : NULL;
 }
 
 static inline void populate_buf_info(struct buffer_info *binfo,
