@@ -8,6 +8,7 @@
 #include <linux/kernel.h>
 #include <linux/atomic.h>
 #include <linux/cgroup.h>
+#include <linux/lockdep.h>
 #include <linux/filter.h>
 #include <linux/slab.h>
 #include <linux/sysctl.h>

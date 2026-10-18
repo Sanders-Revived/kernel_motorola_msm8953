@@ -2066,7 +2066,7 @@ static inline int __bpf_tx_skb(struct net_device *dev, struct sk_buff *skb)
 	}
 
 	skb->dev = dev;
-	skb->tstamp = 0;
+	skb->tstamp = ktime_set(0, 0);
 
 	dev_xmit_recursion_inc();
 	ret = dev_queue_xmit(skb);
@@ -4144,7 +4144,7 @@ BPF_CALL_1(bpf_skb_cgroup_id, const struct sk_buff *, skb)
 		return 0;
 
 	cgrp = sock_cgroup_ptr(&sk->sk_cgrp_data);
-	return cgrp->kn->id.id;
+	return cgrp->kn->ino;
 }
 
 static const struct bpf_func_proto bpf_skb_cgroup_id_proto = {
@@ -4169,7 +4169,7 @@ BPF_CALL_2(bpf_skb_ancestor_cgroup_id, const struct sk_buff *, skb, int,
 	if (!ancestor)
 		return 0;
 
-	return ancestor->kn->id.id;
+	return ancestor->kn->ino;
 }
 
 static const struct bpf_func_proto bpf_skb_ancestor_cgroup_id_proto = {
@@ -4317,10 +4317,6 @@ BPF_CALL_5(bpf_setsockopt, struct bpf_sock_ops_kern *, bpf_sock,
 			sk->sk_sndbuf = max_t(int, val * 2, SOCK_MIN_SNDBUF);
 			break;
 		case SO_MAX_PACING_RATE:
-			if (val != ~0U)
-				cmpxchg(&sk->sk_pacing_status,
-					SK_PACING_NONE,
-					SK_PACING_NEEDED);
 			sk->sk_max_pacing_rate = val;
 			sk->sk_pacing_rate = min(sk->sk_pacing_rate,
 						 sk->sk_max_pacing_rate);
@@ -4735,7 +4731,7 @@ static int bpf_ipv4_fib_lookup(struct net *net, struct bpf_fib_lookup *params,
 		return BPF_FIB_LKUP_RET_NOT_FWDED;
 
 	if (res.fi->fib_nhs > 1)
-		fib_select_path(net, &res, &fl4, NULL);
+		fib_select_path(net, &res, &fl4, -1);
 
 	if (check_mtu) {
 		mtu = ip_mtu_from_fib_result(&res, params->ipv4_dst);
@@ -4771,116 +4767,10 @@ static int bpf_ipv4_fib_lookup(struct net *net, struct bpf_fib_lookup *params,
 static int bpf_ipv6_fib_lookup(struct net *net, struct bpf_fib_lookup *params,
 			       u32 flags, bool check_mtu)
 {
-	struct in6_addr *src = (struct in6_addr *) params->ipv6_src;
-	struct in6_addr *dst = (struct in6_addr *) params->ipv6_dst;
-	struct neighbour *neigh;
-	struct net_device *dev;
-	struct inet6_dev *idev;
-	struct fib6_info *f6i;
-	struct flowi6 fl6;
-	int strict = 0;
-	int oif;
-	u32 mtu;
-
-	/* link local addresses are never forwarded */
-	if (rt6_need_strict(dst) || rt6_need_strict(src))
-		return BPF_FIB_LKUP_RET_NOT_FWDED;
-
-	dev = dev_get_by_index_rcu(net, params->ifindex);
-	if (unlikely(!dev))
-		return -ENODEV;
-
-	idev = __in6_dev_get_safely(dev);
-	if (unlikely(!idev || !idev->cnf.forwarding))
-		return BPF_FIB_LKUP_RET_FWD_DISABLED;
-
-	if (flags & BPF_FIB_LOOKUP_OUTPUT) {
-		fl6.flowi6_iif = 1;
-		oif = fl6.flowi6_oif = params->ifindex;
-	} else {
-		oif = fl6.flowi6_iif = params->ifindex;
-		fl6.flowi6_oif = 0;
-		strict = RT6_LOOKUP_F_HAS_SADDR;
-	}
-	fl6.flowlabel = params->flowinfo;
-	fl6.flowi6_scope = 0;
-	fl6.flowi6_flags = 0;
-	fl6.mp_hash = 0;
-
-	fl6.flowi6_proto = params->l4_protocol;
-	fl6.daddr = *dst;
-	fl6.saddr = *src;
-	fl6.fl6_sport = params->sport;
-	fl6.fl6_dport = params->dport;
-
-	if (flags & BPF_FIB_LOOKUP_DIRECT) {
-		u32 tbid = l3mdev_fib_table_rcu(dev) ? : RT_TABLE_MAIN;
-		struct fib6_table *tb;
-
-		tb = ipv6_stub->fib6_get_table(net, tbid);
-		if (unlikely(!tb))
-			return BPF_FIB_LKUP_RET_NOT_FWDED;
-
-		f6i = ipv6_stub->fib6_table_lookup(net, tb, oif, &fl6, strict);
-	} else {
-		fl6.flowi6_mark = 0;
-		fl6.flowi6_secid = 0;
-		fl6.flowi6_tun_key.tun_id = 0;
-		fl6.flowi6_uid = sock_net_uid(net, NULL);
-
-		f6i = ipv6_stub->fib6_lookup(net, oif, &fl6, strict);
-	}
-
-	if (unlikely(IS_ERR_OR_NULL(f6i) || f6i == net->ipv6.fib6_null_entry))
-		return BPF_FIB_LKUP_RET_NOT_FWDED;
-
-	if (unlikely(f6i->fib6_flags & RTF_REJECT)) {
-		switch (f6i->fib6_type) {
-		case RTN_BLACKHOLE:
-			return BPF_FIB_LKUP_RET_BLACKHOLE;
-		case RTN_UNREACHABLE:
-			return BPF_FIB_LKUP_RET_UNREACHABLE;
-		case RTN_PROHIBIT:
-			return BPF_FIB_LKUP_RET_PROHIBIT;
-		default:
-			return BPF_FIB_LKUP_RET_NOT_FWDED;
-		}
-	}
-
-	if (f6i->fib6_type != RTN_UNICAST)
-		return BPF_FIB_LKUP_RET_NOT_FWDED;
-
-	if (f6i->fib6_nsiblings && fl6.flowi6_oif == 0)
-		f6i = ipv6_stub->fib6_multipath_select(net, f6i, &fl6,
-						       fl6.flowi6_oif, NULL,
-						       strict);
-
-	if (check_mtu) {
-		mtu = ipv6_stub->ip6_mtu_from_fib6(f6i, dst, src);
-		if (params->tot_len > mtu)
-			return BPF_FIB_LKUP_RET_FRAG_NEEDED;
-	}
-
-	if (f6i->fib6_nh.nh_lwtstate)
-		return BPF_FIB_LKUP_RET_UNSUPP_LWT;
-
-	if (f6i->fib6_flags & RTF_GATEWAY)
-		*dst = f6i->fib6_nh.nh_gw;
-
-	dev = f6i->fib6_nh.nh_dev;
-	params->rt_metric = f6i->fib6_metric;
-	params->ifindex = dev->ifindex;
-
-	/* xdp and cls_bpf programs are run in RCU-bh so rcu_read_lock_bh is
-	 * not needed here. Can not use __ipv6_neigh_lookup_noref here
-	 * because we need to get nd_tbl via the stub
+	/* The IPv6 FIB rework (fib6_info, 4.18) is not backported to this
+	 * 4.9 kernel; let the program fall back to the regular stack.
 	 */
-	neigh = ___neigh_lookup_noref(ipv6_stub->nd_tbl, neigh_key_eq128,
-				      ndisc_hashfn, dst, dev);
-	if (!neigh || !(neigh->nud_state & NUD_VALID))
-		return BPF_FIB_LKUP_RET_NO_NEIGH;
-
-	return bpf_fib_set_fwd_params(params, neigh, dev);
+	return BPF_FIB_LKUP_RET_NOT_FWDED;
 }
 #endif
 
