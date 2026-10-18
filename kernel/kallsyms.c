@@ -645,8 +645,8 @@ bool kallsyms_show_value(const struct cred *cred)
 			return true;
 	/* fallthrough */
 	case 1:
-		if (security_capable(cred, &init_user_ns, CAP_SYSLOG,
-				     CAP_OPT_NOAUDIT) == 0)
+		if (security_capable_noaudit(cred, &init_user_ns,
+					     CAP_SYSLOG) == 0)
 			return true;
 	/* fallthrough */
 	default:
