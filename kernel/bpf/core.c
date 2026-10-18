@@ -587,13 +587,6 @@ int bpf_get_kallsym(unsigned int symnum, unsigned long *value, char *type,
 	return ret;
 }
 
-#if IS_ENABLED(CONFIG_BPF_JIT) && IS_ENABLED(CONFIG_CFI_CLANG)
-bool __weak arch_bpf_jit_check_func(const struct bpf_prog *prog)
-{
-	return true;
-}
-EXPORT_SYMBOL(arch_bpf_jit_check_func);
-#endif
 
 struct bpf_binary_header *
 bpf_jit_binary_alloc(unsigned int proglen, u8 **image_ptr,
@@ -1525,7 +1518,7 @@ struct bpf_prog *bpf_prog_select_runtime(struct bpf_prog *fp, int *err)
 }
 EXPORT_SYMBOL_GPL(bpf_prog_select_runtime);
 
-static unsigned int __bpf_prog_ret1(const struct sk_buff *ctx,
+static unsigned int __bpf_prog_ret1(const void *ctx,
 				    const struct bpf_insn *insn)
 {
 	return 1;

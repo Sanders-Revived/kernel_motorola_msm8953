@@ -479,8 +479,8 @@ struct bpf_prog {
 	u8			tag[BPF_TAG_SIZE];
 	struct bpf_prog_aux	*aux;		/* Auxiliary fields */
 	struct sock_fprog_kern	*orig_prog;	/* Original BPF program */
-	unsigned int		(*bpf_func)(const struct sk_buff *skb,
-					    const struct bpf_insn *filter);
+	unsigned int		(*bpf_func)(const void *ctx,
+					    const struct bpf_insn *insn);
 	/* Instructions for interpreter */
 	union {
 		struct sock_filter	insns[0];
