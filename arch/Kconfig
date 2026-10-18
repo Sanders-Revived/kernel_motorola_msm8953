@@ -342,6 +342,9 @@ config ARCH_WANT_OLD_COMPAT_IPC
 	select ARCH_WANT_COMPAT_IPC_PARSE_VERSION
 	bool
 
+config ARCH_HAS_SET_MEMORY
+	bool
+
 config HAVE_ARCH_SECCOMP_FILTER
 	bool
 	help
