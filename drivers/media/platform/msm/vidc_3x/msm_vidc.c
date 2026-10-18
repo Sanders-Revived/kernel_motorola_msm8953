@@ -250,7 +250,7 @@ err_invalid_input:
 	return ret;
 }
 
-struct buffer_info *device_to_uvaddr(struct msm_vidc_list *buf_list,
+static struct buffer_info *find_device_buffer(struct msm_vidc_list *buf_list,
 				phys_addr_t device_addr)
 {
 	struct buffer_info *temp = NULL;
@@ -261,10 +261,9 @@ struct buffer_info *device_to_uvaddr(struct msm_vidc_list *buf_list,
 		dprintk(VIDC_ERR,
 			"Invalid input- device_addr: %pa buf_list: %pK\n",
 			&device_addr, buf_list);
-		goto err_invalid_input;
+		return NULL;
 	}
 
-	mutex_lock(&buf_list->lock);
 	list_for_each_entry(temp, &buf_list->list, list) {
 		for (i = 0; i < min(temp->num_planes, VIDEO_MAX_PLANES); i++) {
 			if (!temp->inactive &&
@@ -279,10 +278,33 @@ struct buffer_info *device_to_uvaddr(struct msm_vidc_list *buf_list,
 		if (found)
 			break;
 	}
+
+	return found ? temp : NULL;
+}
+
+struct buffer_info *device_to_uvaddr(struct msm_vidc_list *buf_list,
+				phys_addr_t device_addr)
+{
+	struct buffer_info *temp;
+
+	if (!buf_list)
+		return NULL;
+
+	mutex_lock(&buf_list->lock);
+	temp = find_device_buffer(buf_list, device_addr);
 	mutex_unlock(&buf_list->lock);
 
-err_invalid_input:
-	return found ? temp : NULL;
+	return temp;
+}
+
+struct buffer_info *device_to_uvaddr_locked(struct msm_vidc_list *buf_list,
+				phys_addr_t device_addr)
+{
+	if (!buf_list)
+		return NULL;
+
+	WARN_ON(!mutex_is_locked(&buf_list->lock));
+	return find_device_buffer(buf_list, device_addr);
 }
 
 static inline void populate_buf_info(struct buffer_info *binfo,
@@ -889,6 +911,7 @@ int msm_vidc_qbuf(void *instance, struct v4l2_buffer *b)
 	if (rc)
 		return rc;
 
+	mutex_lock(&inst->registeredbufs.lock);
 	for (i = 0; i < b->length; ++i) {
 		if (EXTRADATA_IDX(b->length) &&
 			(i == EXTRADATA_IDX(b->length)) &&
@@ -896,15 +919,14 @@ int msm_vidc_qbuf(void *instance, struct v4l2_buffer *b)
 			b->m.planes[i].m.userptr = 0;
 			continue;
 		}
-		mutex_lock(&inst->registeredbufs.lock);
 		binfo = get_registered_buf(inst, b, i, &plane);
-		mutex_unlock(&inst->registeredbufs.lock);
 		if (!binfo) {
 			dprintk(VIDC_ERR,
 				"This buffer is not registered: %d, %d, %d\n",
 				b->m.planes[i].reserved[0],
 				b->m.planes[i].reserved[1],
 				b->m.planes[i].length);
+			mutex_unlock(&inst->registeredbufs.lock);
 			goto err_invalid_buff;
 		}
 		b->m.planes[i].m.userptr = binfo->device_addr[i];
@@ -914,10 +936,17 @@ int msm_vidc_qbuf(void *instance, struct v4l2_buffer *b)
 
 	qbuf_cache_operations(inst, binfo);
 
-	if (inst->session_type == MSM_VIDC_DECODER)
-		return msm_vdec_qbuf(instance, b);
-	if (inst->session_type == MSM_VIDC_ENCODER)
-		return msm_venc_qbuf(instance, b);
+	if (inst->session_type == MSM_VIDC_DECODER) {
+		rc = msm_vdec_qbuf(instance, b);
+		mutex_unlock(&inst->registeredbufs.lock);
+		return rc;
+	}
+	if (inst->session_type == MSM_VIDC_ENCODER) {
+		rc = msm_venc_qbuf(instance, b);
+		mutex_unlock(&inst->registeredbufs.lock);
+		return rc;
+	}
+	mutex_unlock(&inst->registeredbufs.lock);
 
 err_invalid_buff:
 	return -EINVAL;
@@ -941,18 +970,20 @@ int msm_vidc_dqbuf(void *instance, struct v4l2_buffer *b)
 	if (rc)
 		return rc;
 
+	mutex_lock(&inst->registeredbufs.lock);
 	for (i = b->length - 1; i >= 0 ; i--) {
 		if (EXTRADATA_IDX(b->length) &&
 			i == EXTRADATA_IDX(b->length)) {
 			continue;
 		}
-		buffer_info = device_to_uvaddr(&inst->registeredbufs,
+		buffer_info = device_to_uvaddr_locked(&inst->registeredbufs,
 			b->m.planes[i].m.userptr);
 
 		if (!buffer_info) {
 			dprintk(VIDC_ERR,
 				"%s no buffer info registered for buffer addr: %#lx\n",
 				__func__, b->m.planes[i].m.userptr);
+			mutex_unlock(&inst->registeredbufs.lock);
 			return -EINVAL;
 		}
 
@@ -972,6 +1003,7 @@ int msm_vidc_dqbuf(void *instance, struct v4l2_buffer *b)
 			dprintk(VIDC_ERR,
 			"%s: Failed to find user virtual address, %#lx, %d, %d\n",
 			__func__, b->m.planes[i].m.userptr, b->type, i);
+			mutex_unlock(&inst->registeredbufs.lock);
 			return -EINVAL;
 		}
 	}
@@ -980,22 +1012,24 @@ int msm_vidc_dqbuf(void *instance, struct v4l2_buffer *b)
 		dprintk(VIDC_ERR,
 			"%s: error - no buffer info found in registered list\n",
 			__func__);
+		mutex_unlock(&inst->registeredbufs.lock);
 		return -EINVAL;
 	}
 
 	rc = dqbuf_cache_operations(inst, b, buffer_info);
-	if (rc)
+	if (rc) {
+		mutex_unlock(&inst->registeredbufs.lock);
 		return rc;
+	}
 
 	if (is_dynamic_output_buffer_mode(b, inst)) {
 		buffer_info->dequeued = true;
 
 		dprintk(VIDC_DBG, "[DEQUEUED]: fd[0] = %d\n",
 			buffer_info->fd[0]);
-		mutex_lock(&inst->registeredbufs.lock);
 		rc = unmap_and_deregister_buf(inst, buffer_info);
-		mutex_unlock(&inst->registeredbufs.lock);
 	}
+	mutex_unlock(&inst->registeredbufs.lock);
 
 	return rc;
 }

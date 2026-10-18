@@ -382,6 +382,8 @@ struct buffer_info {
 
 struct buffer_info *device_to_uvaddr(struct msm_vidc_list *buf_list,
 				phys_addr_t device_addr);
+struct buffer_info *device_to_uvaddr_locked(struct msm_vidc_list *buf_list,
+				phys_addr_t device_addr);
 int buf_ref_get(struct msm_vidc_inst *inst, struct buffer_info *binfo);
 int buf_ref_put(struct msm_vidc_inst *inst, struct buffer_info *binfo);
 

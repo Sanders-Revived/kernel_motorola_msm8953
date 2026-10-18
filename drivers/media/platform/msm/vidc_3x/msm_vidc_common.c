@@ -1285,7 +1285,7 @@ static void handle_event_change(enum hal_command_response cmd, void *data)
 	case HAL_EVENT_RELEASE_BUFFER_REFERENCE:
 	{
 		struct v4l2_event buf_event = {0};
-		struct buffer_info *binfo = NULL, *temp = NULL;
+		struct buffer_info *binfo = NULL;
 		u32 *ptr = NULL;
 
 		dprintk(VIDC_DBG, "%s - inst: %pK buffer: %pa extra: %pa\n",
@@ -1303,12 +1303,14 @@ static void handle_event_change(enum hal_command_response cmd, void *data)
 		 * Get the buffer_info entry for the
 		 * device address.
 		 */
-		binfo = device_to_uvaddr(&inst->registeredbufs,
+		mutex_lock(&inst->registeredbufs.lock);
+		binfo = device_to_uvaddr_locked(&inst->registeredbufs,
 				event_notify->packet_buffer);
 		if (!binfo) {
 			dprintk(VIDC_ERR,
 					"%s buffer not found in registered list\n",
 					__func__);
+			mutex_unlock(&inst->registeredbufs.lock);
 			goto err_bad_event;
 		}
 
@@ -1322,16 +1324,8 @@ static void handle_event_change(enum hal_command_response cmd, void *data)
 				"RELEASE REFERENCE EVENT FROM F/W - fd = %d offset = %d\n",
 				ptr[0], ptr[1]);
 
-		/* Decrement buffer reference count*/
-		mutex_lock(&inst->registeredbufs.lock);
-		list_for_each_entry(temp, &inst->registeredbufs.list,
-				list) {
-			if (temp == binfo) {
-				buf_ref_put(inst, binfo);
-				break;
-			}
-		}
-
+		/* Decrement buffer reference count while keeping binfo alive. */
+		buf_ref_put(inst, binfo);
 		/*
 		 * Release buffer and remove from list
 		 * if reference goes to zero.
@@ -2088,17 +2082,19 @@ int buf_ref_put(struct msm_vidc_inst *inst, struct buffer_info *binfo)
 	return cnt;
 }
 
-static void handle_dynamic_buffer(struct msm_vidc_inst *inst,
+static void handle_dynamic_buffer_locked(struct msm_vidc_inst *inst,
 		phys_addr_t device_addr, u32 flags)
 {
-	struct buffer_info *binfo = NULL, *temp = NULL;
+	struct buffer_info *binfo = NULL;
+
+	WARN_ON(!mutex_is_locked(&inst->registeredbufs.lock));
 
 	/*
 	 * Update reference count and release OR queue back the buffer,
 	 * only when firmware is not holding a reference.
 	 */
 	if (inst->buffer_mode_set[CAPTURE_PORT] == HAL_BUFFER_MODE_DYNAMIC) {
-		binfo = device_to_uvaddr(&inst->registeredbufs, device_addr);
+		binfo = device_to_uvaddr_locked(&inst->registeredbufs, device_addr);
 		if (!binfo) {
 			dprintk(VIDC_ERR,
 				"%s buffer not found in registered list\n",
@@ -2114,15 +2110,7 @@ static void handle_dynamic_buffer(struct msm_vidc_inst *inst,
 				"FBD fd[0] = %d -> FBD_ref_released, addr: %pa\n",
 				binfo->fd[0], &device_addr);
 
-			mutex_lock(&inst->registeredbufs.lock);
-			list_for_each_entry(temp, &inst->registeredbufs.list,
-							list) {
-				if (temp == binfo) {
-					buf_ref_put(inst, binfo);
-					break;
-				}
-			}
-			mutex_unlock(&inst->registeredbufs.lock);
+			buf_ref_put(inst, binfo);
 		}
 	}
 }
@@ -2196,12 +2184,7 @@ static void handle_fbd(enum hal_command_response cmd, void *data)
 
 	fill_buf_done = (struct vidc_hal_fbd *)&response->output_done;
 	buffer_type = msm_comm_get_hal_output_buffer(inst);
-	mutex_lock(&inst->bufq[CAPTURE_PORT].lock);
-	if (fill_buf_done->buffer_type == buffer_type) {
-		vb = get_vb_from_device_addr(&inst->bufq[CAPTURE_PORT],
-				fill_buf_done->packet_buffer1);
-	} else {
-		mutex_unlock(&inst->bufq[CAPTURE_PORT].lock);
+	if (fill_buf_done->buffer_type != buffer_type) {
 		if (handle_multi_stream_buffers(inst,
 				fill_buf_done->packet_buffer1))
 			dprintk(VIDC_ERR,
@@ -2209,12 +2192,45 @@ static void handle_fbd(enum hal_command_response cmd, void *data)
 				&fill_buf_done->packet_buffer1);
 		goto err_handle_fbd;
 	}
+
 	/*
-	 * Do not hold the capture queue lock while handling dynamic buffers.
-	 * handle_dynamic_buffer() may requeue a buffer through vb2_qbuf(),
-	 * which acquires this same lock in msm_venc_qbuf()/msm_vdec_qbuf().
+	 * Keep the registered buffer alive while updating its metadata and
+	 * handling the dynamic-buffer reference.  That path may requeue through
+	 * vb2_qbuf(), so the capture queue lock must not be held here.
 	 */
-	mutex_unlock(&inst->bufq[CAPTURE_PORT].lock);
+	mutex_lock(&inst->registeredbufs.lock);
+	buffer_info = device_to_uvaddr_locked(&inst->registeredbufs,
+			fill_buf_done->packet_buffer1);
+	if (!buffer_info) {
+		dprintk(VIDC_ERR,
+			"%s buffer not found in registered list\n",
+			__func__);
+		mutex_unlock(&inst->registeredbufs.lock);
+		goto err_handle_fbd;
+	}
+	buffer_info->crop_data.nLeft = fill_buf_done->start_x_coord;
+	buffer_info->crop_data.nTop = fill_buf_done->start_y_coord;
+	buffer_info->crop_data.nWidth = fill_buf_done->frame_width;
+	buffer_info->crop_data.nHeight = fill_buf_done->frame_height;
+	buffer_info->crop_data.width_height[0] =
+					inst->prop.width[CAPTURE_PORT];
+	buffer_info->crop_data.width_height[1] =
+					inst->prop.height[CAPTURE_PORT];
+	handle_dynamic_buffer_locked(inst, fill_buf_done->packet_buffer1,
+				fill_buf_done->flags1);
+	mutex_unlock(&inst->registeredbufs.lock);
+
+	/* Re-find the vb2 entry after a possible dynamic-buffer requeue. */
+	mutex_lock(&inst->bufq[CAPTURE_PORT].lock);
+	vb = get_vb_from_device_addr(&inst->bufq[CAPTURE_PORT],
+			fill_buf_done->packet_buffer1);
+	if (!vb) {
+		dprintk(VIDC_ERR,
+			"Failed to find video buffer for fbd: %pa\n",
+			&fill_buf_done->packet_buffer1);
+		mutex_unlock(&inst->bufq[CAPTURE_PORT].lock);
+		goto err_handle_fbd;
+	}
 
 	if (vb) {
 		vbuf = to_vb2_v4l2_buffer(vb);
@@ -2230,25 +2246,6 @@ static void handle_fbd(enum hal_command_response cmd, void *data)
 				"fbd:Overflow bytesused = %d; length = %d\n",
 				vb->planes[0].bytesused,
 				vb->planes[0].length);
-
-		buffer_info = device_to_uvaddr(&inst->registeredbufs,
-			fill_buf_done->packet_buffer1);
-
-		if (!buffer_info) {
-			dprintk(VIDC_ERR,
-				"%s buffer not found in registered list\n",
-				__func__);
-			goto err_handle_fbd;
-		}
-
-		buffer_info->crop_data.nLeft = fill_buf_done->start_x_coord;
-		buffer_info->crop_data.nTop = fill_buf_done->start_y_coord;
-		buffer_info->crop_data.nWidth = fill_buf_done->frame_width;
-		buffer_info->crop_data.nHeight = fill_buf_done->frame_height;
-		buffer_info->crop_data.width_height[0] =
-						inst->prop.width[CAPTURE_PORT];
-		buffer_info->crop_data.width_height[1] =
-						inst->prop.height[CAPTURE_PORT];
 
 		if (!(fill_buf_done->flags1 &
 			HAL_BUFFERFLAG_TIMESTAMPINVALID)) {
@@ -2276,8 +2273,6 @@ static void handle_fbd(enum hal_command_response cmd, void *data)
 			vb->planes[extra_idx].data_offset = 0;
 		}
 
-		handle_dynamic_buffer(inst, fill_buf_done->packet_buffer1,
-					fill_buf_done->flags1);
 		if (fill_buf_done->flags1 & HAL_BUFFERFLAG_READONLY)
 			vbuf->flags |= V4L2_QCOM_BUF_FLAG_READONLY;
 		if (fill_buf_done->flags1 & HAL_BUFFERFLAG_EOS)
@@ -2347,7 +2342,6 @@ static void handle_fbd(enum hal_command_response cmd, void *data)
 		fill_buf_done->frame_height, fill_buf_done->picture_type,
 		fill_buf_done->mark_data);
 
-		mutex_lock(&inst->bufq[CAPTURE_PORT].lock);
 		if (vb->state == VB2_BUF_STATE_ACTIVE) {
 			vb2_buffer_done(vb, VB2_BUF_STATE_DONE);
 			msm_vidc_debugfs_update(inst, MSM_VIDC_DEBUGFS_EVENT_FBD);
