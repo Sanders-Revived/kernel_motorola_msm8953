@@ -42,6 +42,55 @@ extern void netlink_table_ungrab(void);
 #define NL_CFG_F_NONROOT_RECV	(1 << 0)
 #define NL_CFG_F_NONROOT_SEND	(1 << 1)
 
+#define NETLINK_MAX_COOKIE_LEN	20
+
+/**
+ * struct netlink_ext_ack - netlink extended ACK report struct
+ * @_msg: message string to report - don't access directly, use
+ *	%NL_SET_ERR_MSG
+ * @bad_attr: attribute with error
+ * @cookie: cookie data to return to userspace (for success)
+ * @cookie_len: actual cookie data length
+ */
+struct netlink_ext_ack {
+	const char *_msg;
+	const struct nlattr *bad_attr;
+	u8 cookie[NETLINK_MAX_COOKIE_LEN];
+	u8 cookie_len;
+};
+
+/* Always use this macro, this allows later putting the
+ * message into a separate section or such for things
+ * like translation or listing all possible messages.
+ * Currently string formatting is not supported (due
+ * to the lack of an output buffer.)
+ */
+#define NL_SET_ERR_MSG(extack, msg) do {		\
+	static const char __msg[] = (msg);		\
+	struct netlink_ext_ack *__extack = (extack);	\
+							\
+	if (__extack)					\
+		__extack->_msg = __msg;			\
+} while (0)
+
+#define NL_SET_ERR_MSG_MOD(extack, msg)			\
+	NL_SET_ERR_MSG((extack), KBUILD_MODNAME ": " msg)
+
+#define NL_SET_BAD_ATTR(extack, attr) do {		\
+	if ((extack))					\
+		(extack)->bad_attr = (attr);		\
+} while (0)
+
+#define NL_SET_ERR_MSG_ATTR(extack, attr, msg) do {	\
+	static const char __msg[] = (msg);		\
+	struct netlink_ext_ack *__extack = (extack);	\
+							\
+	if (__extack) {					\
+		__extack->_msg = __msg;			\
+		__extack->bad_attr = (attr);		\
+	}						\
+} while (0)
+
 /* optional Netlink kernel configuration parameters */
 struct netlink_kernel_cfg {
 	unsigned int	groups;
