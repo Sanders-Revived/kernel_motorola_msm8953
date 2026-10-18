@@ -376,7 +376,6 @@ struct buffer_info {
 	bool dequeued;
 	bool inactive;
 	bool mapped[VIDEO_MAX_PLANES];
-	int same_fd_ref[VIDEO_MAX_PLANES];
 	struct timeval timestamp;
 	struct crop_info crop_data;
 };

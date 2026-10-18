@@ -310,17 +310,21 @@ int msm_smem_unmap_dma_buf(struct msm_vidc_inst *inst, struct msm_smem *smem)
 	if (smem->refcount)
 		goto exit;
 
-	rc = msm_dma_put_device_address(smem->flags, &smem->mapping_info,
-		smem->buffer_type);
-	if (rc) {
-		dprintk(VIDC_ERR, "Failed to put device address: %d\n", rc);
-		goto exit;
+	if (smem->mapping_info.dev) {
+		rc = msm_dma_put_device_address(smem->flags,
+			&smem->mapping_info, smem->buffer_type);
+		if (rc)
+			dprintk(VIDC_ERR,
+				"Failed to put device address: %d\n", rc);
 	}
 
-	msm_smem_put_dma_buf(smem->dma_buf);
+	if (smem->dma_buf) {
+		msm_smem_put_dma_buf(smem->dma_buf);
+		smem->dma_buf = NULL;
+	}
 
 	smem->device_addr = 0x0;
-	smem->dma_buf = NULL;
+	smem->refcount = 0;
 
 exit:
 	return rc;
@@ -522,11 +526,11 @@ static int free_dma_mem(struct msm_smem *mem)
 		__func__, mem->dma_buf, mem->device_addr, mem->size,
 		mem->kvaddr, mem->buffer_type);
 
-	if (mem->device_addr) {
+	if (mem->mapping_info.dev) {
 		msm_dma_put_device_address(mem->flags,
 			&mem->mapping_info, mem->buffer_type);
-		mem->device_addr = 0x0;
 	}
+	mem->device_addr = 0x0;
 
 	if (mem->kvaddr) {
 		dma_buf_vunmap(mem->dma_buf, mem->kvaddr);
@@ -543,6 +547,7 @@ static int free_dma_mem(struct msm_smem *mem)
 		trace_msm_smem_buffer_dma_op_end("FREE", (u32)mem->buffer_type,
 			-1, mem->size, -1, mem->flags, -1);
 	}
+	mem->refcount = 0;
 
 	return 0;
 }

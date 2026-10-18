@@ -250,42 +250,6 @@ err_invalid_input:
 	return ret;
 }
 
-static struct msm_smem *get_same_fd_buffer(struct msm_vidc_inst *inst, int fd)
-{
-	struct buffer_info *temp;
-	struct msm_smem *same_fd_handle = NULL;
-	int i;
-
-	if (!fd)
-		return NULL;
-
-	if (!inst || fd < 0) {
-		dprintk(VIDC_ERR, "%s: Invalid input\n", __func__);
-		goto err_invalid_input;
-	}
-
-	mutex_lock(&inst->registeredbufs.lock);
-	list_for_each_entry(temp, &inst->registeredbufs.list, list) {
-		for (i = 0; i < min(temp->num_planes, VIDEO_MAX_PLANES); i++) {
-			bool dma_matches = msm_smem_compare_buffers(fd,
-						temp->smem[i].dma_buf);
-			if (dma_matches && temp->mapped[i])  {
-				temp->same_fd_ref[i]++;
-				dprintk(VIDC_INFO,
-				"Found same fd buffer\n");
-				same_fd_handle = &temp->smem[i];
-				break;
-			}
-		}
-		if (same_fd_handle)
-			break;
-	}
-	mutex_unlock(&inst->registeredbufs.lock);
-
-err_invalid_input:
-	return same_fd_handle;
-}
-
 struct buffer_info *device_to_uvaddr(struct msm_vidc_list *buf_list,
 				phys_addr_t device_addr)
 {
@@ -412,7 +376,6 @@ int map_and_register_buf(struct msm_vidc_inst *inst, struct v4l2_buffer *b)
 	struct buffer_info *temp = NULL, *iterator = NULL;
 	int plane = 0;
 	int i = 0, rc = 0;
-	struct msm_smem *same_fd_handle = NULL;
 
 	if (!b || !inst) {
 		dprintk(VIDC_ERR, "%s: invalid input\n", __func__);
@@ -490,33 +453,20 @@ int map_and_register_buf(struct msm_vidc_inst *inst, struct v4l2_buffer *b)
 			goto exit;
 		}
 
-		same_fd_handle = get_same_fd_buffer(
-				inst, b->m.planes[i].reserved[0]);
-
 		populate_buf_info(binfo, b, i);
-		if (same_fd_handle) {
-			binfo->device_addr[i] =
-			same_fd_handle->device_addr + binfo->buff_off[i];
-			b->m.planes[i].m.userptr = binfo->device_addr[i];
-			binfo->mapped[i] = false;
-			binfo->smem[i] = *same_fd_handle;
-		} else {
-			binfo->smem[i].buffer_type = get_hal_buffer_type(
-							inst, b);
-			binfo->smem[i].fd = binfo->fd[i];
-			binfo->smem[i].offset = binfo->buff_off[i];
-			binfo->smem[i].size = binfo->size[i];
-			rc = msm_smem_map_dma_buf(inst, &binfo->smem[i]);
-			if (rc) {
-				dprintk(VIDC_ERR, "%s: map failed.\n",
-						 __func__);
-				goto exit;
-			}
-			binfo->mapped[i] = true;
-			binfo->device_addr[i] = binfo->smem[i].device_addr +
-				binfo->buff_off[i];
-			b->m.planes[i].m.userptr = binfo->device_addr[i];
+		binfo->smem[i].buffer_type = get_hal_buffer_type(inst, b);
+		binfo->smem[i].fd = binfo->fd[i];
+		binfo->smem[i].offset = binfo->buff_off[i];
+		binfo->smem[i].size = binfo->size[i];
+		rc = msm_smem_map_dma_buf(inst, &binfo->smem[i]);
+		if (rc) {
+			dprintk(VIDC_ERR, "%s: map failed.\n", __func__);
+			goto exit;
 		}
+		binfo->mapped[i] = true;
+		binfo->device_addr[i] = binfo->smem[i].device_addr +
+			binfo->buff_off[i];
+		b->m.planes[i].m.userptr = binfo->device_addr[i];
 
 		/* We maintain one ref count for all planes*/
 		if (!i && is_dynamic_output_buffer_mode(b, inst)) {
@@ -556,7 +506,7 @@ int unmap_and_deregister_buf(struct msm_vidc_inst *inst,
 {
 	int i = 0;
 	struct buffer_info *temp = NULL;
-	bool found = false, keep_node = false;
+	bool found = false;
 
 	if (!inst || !binfo) {
 		dprintk(VIDC_ERR, "%s invalid param: %pK %pK\n",
@@ -594,15 +544,11 @@ int unmap_and_deregister_buf(struct msm_vidc_inst *inst,
 			&temp->device_addr[i], temp->fd[i],
 			temp->buff_off[i], temp->mapped[i]);
 		/*
-		 * Unmap the handle only if the buffer has been mapped and no
-		 * other buffer has a reference to this buffer.
-		 * In case of buffers with same fd, we will map the buffer only
-		 * once and subsequent buffers will refer to the mapped buffer's
-		 * device address.
-		 * For buffers which share the same fd, do not unmap and keep
-		 * the buffer info in registered list.
+		 * Every mapped plane owns its dma-buf attachment.  Do not share
+		 * struct msm_smem by value: its IOMMU mapping and dma-buf reference
+		 * are ownership state, not copyable buffer metadata.
 		 */
-		if (temp->mapped[i] && !temp->same_fd_ref[i]) {
+		if (temp->mapped[i]) {
 			if (msm_smem_unmap_dma_buf(inst, &temp->smem[i]))
 				dprintk(VIDC_DBG, "unmap failed..\n");
 
@@ -610,23 +556,13 @@ int unmap_and_deregister_buf(struct msm_vidc_inst *inst,
 				&temp->smem[i]);
 		}
 
-		if (temp->same_fd_ref[i])
-			keep_node = true;
-		else {
-			temp->fd[i] = 0;
-			//temp->smem[i] = 0;
-			temp->device_addr[i] = 0;
-			temp->uvaddr[i] = 0;
-		}
+		temp->fd[i] = 0;
+		temp->device_addr[i] = 0;
+		temp->uvaddr[i] = 0;
 	}
-	if (!keep_node) {
-		dprintk(VIDC_DBG, "[UNMAP] AND-FREED binfo: %pK\n", temp);
-		list_del(&temp->list);
-		kfree(temp);
-	} else {
-		temp->inactive = true;
-		dprintk(VIDC_DBG, "[UNMAP] NOT-FREED binfo: %pK\n", temp);
-	}
+	dprintk(VIDC_DBG, "[UNMAP] AND-FREED binfo: %pK\n", temp);
+	list_del(&temp->list);
+	kfree(temp);
 exit:
 	return 0;
 }
