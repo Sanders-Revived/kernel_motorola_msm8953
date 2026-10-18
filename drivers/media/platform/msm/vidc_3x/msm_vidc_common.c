@@ -2209,6 +2209,12 @@ static void handle_fbd(enum hal_command_response cmd, void *data)
 				&fill_buf_done->packet_buffer1);
 		goto err_handle_fbd;
 	}
+	/*
+	 * Do not hold the capture queue lock while handling dynamic buffers.
+	 * handle_dynamic_buffer() may requeue a buffer through vb2_qbuf(),
+	 * which acquires this same lock in msm_venc_qbuf()/msm_vdec_qbuf().
+	 */
+	mutex_unlock(&inst->bufq[CAPTURE_PORT].lock);
 
 	if (vb) {
 		vbuf = to_vb2_v4l2_buffer(vb);
@@ -2232,7 +2238,6 @@ static void handle_fbd(enum hal_command_response cmd, void *data)
 			dprintk(VIDC_ERR,
 				"%s buffer not found in registered list\n",
 				__func__);
-			mutex_unlock(&inst->bufq[CAPTURE_PORT].lock);
 			goto err_handle_fbd;
 		}
 
@@ -2342,10 +2347,17 @@ static void handle_fbd(enum hal_command_response cmd, void *data)
 		fill_buf_done->frame_height, fill_buf_done->picture_type,
 		fill_buf_done->mark_data);
 
-		vb2_buffer_done(vb, VB2_BUF_STATE_DONE);
-		msm_vidc_debugfs_update(inst, MSM_VIDC_DEBUGFS_EVENT_FBD);
+		mutex_lock(&inst->bufq[CAPTURE_PORT].lock);
+		if (vb->state == VB2_BUF_STATE_ACTIVE) {
+			vb2_buffer_done(vb, VB2_BUF_STATE_DONE);
+			msm_vidc_debugfs_update(inst, MSM_VIDC_DEBUGFS_EVENT_FBD);
+		} else {
+			dprintk(VIDC_WARN,
+				"FBD buffer %d is no longer active (state %d)\n",
+				vb->index, vb->state);
+		}
+		mutex_unlock(&inst->bufq[CAPTURE_PORT].lock);
 	}
-	mutex_unlock(&inst->bufq[CAPTURE_PORT].lock);
 
 err_handle_fbd:
 	put_inst(inst);
