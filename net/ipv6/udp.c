@@ -186,6 +186,8 @@ static struct sock *udp6_lib_lookup2(struct net *net,
 
 				result = reuseport_select_sock(sk, hash, skb,
 							sizeof(struct udphdr));
+				if (unlikely(IS_ERR(result)))
+					return NULL;
 				if (result)
 					return result;
 				matches = 1;
