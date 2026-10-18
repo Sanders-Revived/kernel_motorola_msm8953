@@ -512,13 +512,6 @@ int map_and_register_buf(struct msm_vidc_inst *inst, struct v4l2_buffer *b)
 						 __func__);
 				goto exit;
 			}
-			/* increase refcount as we get both fbd and rbr */
-			rc = msm_smem_map_dma_buf(inst, &binfo->smem[i]);
-			if (rc) {
-				dprintk(VIDC_ERR, "%s: map failed..\n",
-						 __func__);
-				goto exit;
-			}
 			binfo->mapped[i] = true;
 			binfo->device_addr[i] = binfo->smem[i].device_addr +
 				binfo->buff_off[i];
@@ -544,6 +537,17 @@ int map_and_register_buf(struct msm_vidc_inst *inst, struct v4l2_buffer *b)
 	return 0;
 
 exit:
+	if (binfo) {
+		for (plane = 0; plane < binfo->num_planes; plane++) {
+			if (!binfo->mapped[plane])
+				continue;
+			if (msm_smem_unmap_dma_buf(inst,
+					&binfo->smem[plane]))
+				dprintk(VIDC_ERR, "%s: unmap failed..\n",
+					__func__);
+			msm_comm_smem_free(inst, &binfo->smem[plane]);
+		}
+	}
 	kfree(binfo);
 	return rc;
 }
@@ -905,6 +909,10 @@ free_and_unmap:
 						__func__, bi, i, &bi->smem[i],
 						&bi->device_addr[i], bi->fd[i],
 						bi->buff_off[i], bi->mapped[i]);
+					if (msm_smem_unmap_dma_buf(inst,
+							&bi->smem[i]))
+						dprintk(VIDC_ERR,
+							"%s: unmap failed..\n", __func__);
 					msm_comm_smem_free(inst,
 							&bi->smem[i]);
 				}

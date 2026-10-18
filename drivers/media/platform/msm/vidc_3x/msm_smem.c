@@ -274,6 +274,17 @@ int msm_smem_map_dma_buf(struct msm_vidc_inst *inst, struct msm_smem *smem)
 
 	smem->refcount++;
 exit:
+	if (rc) {
+		if (smem->mapping_info.dev)
+			msm_dma_put_device_address(smem->flags,
+				&smem->mapping_info, smem->buffer_type);
+		if (smem->dma_buf) {
+			msm_smem_put_dma_buf(smem->dma_buf);
+			smem->dma_buf = NULL;
+		}
+		smem->device_addr = 0;
+		smem->refcount = 0;
+	}
 	return rc;
 }
 
@@ -471,6 +482,7 @@ static int alloc_dma_mem(size_t size, u32 align, u32 flags,
 	if ((dma_addr_t)mem->device_addr != iova) {
 		dprintk(VIDC_ERR, "iova(%pa) truncated to %#x",
 			&iova, mem->device_addr);
+		rc = -EINVAL;
 		goto fail_device_address;
 	}
 
@@ -495,6 +507,9 @@ fail_map:
 	if (map_kernel)
 		dma_buf_end_cpu_access(dbuf, DMA_BIDIRECTIONAL);
 fail_device_address:
+	if (mem->mapping_info.dev)
+		msm_dma_put_device_address(mem->flags, &mem->mapping_info,
+			mem->buffer_type);
 	dma_buf_put(dbuf);
 fail_shared_mem_alloc:
 	return rc;

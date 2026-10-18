@@ -5336,8 +5336,8 @@ int msm_comm_smem_cache_operations(struct msm_vidc_inst *inst,
 			"%s: invalid params: %pK %pK\n", __func__, inst, mem);
 		return -EINVAL;
 	}
-	return msm_smem_cache_operations(mem->dma_buf, mem->offset,
-					mem->size, cache_ops);
+	return msm_smem_cache_operations(mem->dma_buf, cache_ops,
+					mem->offset, mem->size);
 }
 
 int msm_comm_set_color_format(struct msm_vidc_inst *inst,
