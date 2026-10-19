@@ -1249,6 +1249,17 @@ int bpf_probe_unregister(struct bpf_raw_event_map *btp, struct bpf_prog *prog)
 	return err;
 }
 
+/* 4.9: no is_syscall_trace_event() in linux/syscalls.h (upstream 4.17) */
+static inline int is_syscall_trace_event(struct trace_event_call *tp_event)
+{
+#ifdef CONFIG_FTRACE_SYSCALLS
+	return tp_event->class == &event_class_syscall_enter ||
+	       tp_event->class == &event_class_syscall_exit;
+#else
+	return 0;
+#endif
+}
+
 int bpf_get_perf_event_info(const struct perf_event *event, u32 *prog_id,
 			    u32 *fd_type, const char **buf,
 			    u64 *probe_offset, u64 *probe_addr)

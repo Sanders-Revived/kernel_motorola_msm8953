@@ -73,6 +73,13 @@ static nokprobe_inline bool trace_kprobe_is_on_module(struct trace_kprobe *tk)
 	return !!strchr(trace_kprobe_symbol(tk), ':');
 }
 
+int trace_kprobe_ftrace(struct trace_event_call *call)
+{
+	struct trace_kprobe *tk = (struct trace_kprobe *)call->data;
+
+	return kprobe_ftrace(&tk->rp.kp);
+}
+
 static int register_kprobe_event(struct trace_kprobe *tk);
 static int unregister_kprobe_event(struct trace_kprobe *tk);
 
@@ -1388,7 +1395,7 @@ create_local_trace_kprobe(char *func, void *addr, unsigned long offs,
 	event = func ? func : "DUMMY_EVENT";
 
 	tk = alloc_trace_kprobe(KPROBE_EVENT_SYSTEM, event, (void *)addr, func,
-				offs, 0 /* maxactive */, 0 /* nargs */,
+				offs, 0 /* nargs */,
 				is_return);
 
 	if (IS_ERR(tk)) {
