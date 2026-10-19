@@ -183,6 +183,29 @@ static int cam_smmu_free_scratch_buffer_remove_from_list(
 
 static void cam_smmu_clean_buffer_list(int idx);
 
+static bool cam_smmu_mapping_list_is_valid(
+		struct cam_dma_buff_info *mapping_info)
+{
+	struct list_head *entry;
+	struct list_head *prev;
+	struct list_head *next;
+
+	if (!mapping_info)
+		return false;
+
+	entry = &mapping_info->list;
+	prev = READ_ONCE(entry->prev);
+	next = READ_ONCE(entry->next);
+
+	if (!prev || !next || prev == LIST_POISON1 ||
+		next == LIST_POISON1 || prev == LIST_POISON2 ||
+		next == LIST_POISON2)
+		return false;
+
+	return READ_ONCE(prev->next) == entry &&
+		READ_ONCE(next->prev) == entry;
+}
+
 static void cam_smmu_print_list(int idx);
 
 static void cam_smmu_print_table(void);
@@ -868,6 +891,11 @@ static int cam_smmu_unmap_buf_and_remove_from_list(
 		struct cam_dma_buff_info *mapping_info,
 		int idx)
 {
+	struct dma_buf *buf;
+	struct dma_buf_attachment *attach;
+	struct sg_table *table;
+	enum dma_data_direction dir;
+
 	if ((!mapping_info->buf) || (!mapping_info->table) ||
 		(!mapping_info->attach)) {
 		pr_err("Error: Invalid params dev = %pK, table = %pK",
@@ -879,14 +907,28 @@ static int cam_smmu_unmap_buf_and_remove_from_list(
 		return -EINVAL;
 	}
 
-	/* iommu buffer clean up */
-	dma_buf_unmap_attachment(mapping_info->attach,
-		mapping_info->table, mapping_info->dir);
-	dma_buf_detach(mapping_info->buf, mapping_info->attach);
-	dma_buf_put(mapping_info->buf);
-	mapping_info->buf = NULL;
+	if (!cam_smmu_mapping_list_is_valid(mapping_info)) {
+		pr_err("SMMU list corruption: idx=%d fd=%d map=%pK "
+			"prev=%pK next=%pK\n", idx, mapping_info->ion_fd,
+			mapping_info, mapping_info->list.prev,
+			mapping_info->list.next);
+		return -EINVAL;
+	}
 
+	/* Remove ownership from the list before calling dma-buf callbacks. */
+	buf = mapping_info->buf;
+	attach = mapping_info->attach;
+	table = mapping_info->table;
+	dir = mapping_info->dir;
 	list_del_init(&mapping_info->list);
+	mapping_info->buf = NULL;
+	mapping_info->attach = NULL;
+	mapping_info->table = NULL;
+
+	/* iommu buffer clean up */
+	dma_buf_unmap_attachment(attach, table, dir);
+	dma_buf_detach(buf, attach);
+	dma_buf_put(buf);
 
 	/* free one buffer */
 	kfree(mapping_info);
@@ -1360,6 +1402,13 @@ int cam_smmu_put_phy_addr(int handle, int ion_fd)
 		goto put_addr_end;
 	}
 
+	if (mapping_info->ref_count <= 0) {
+		pr_err("Error: invalid SMMU refcount %d for idx=%d fd=%d\n",
+			mapping_info->ref_count, idx, ion_fd);
+		rc = -EINVAL;
+		goto put_addr_end;
+	}
+
 	mapping_info->ref_count--;
 	if (mapping_info->ref_count > 0) {
 		CDBG("There are still %u buffer(s) with same fd %d",
@@ -1367,6 +1416,7 @@ int cam_smmu_put_phy_addr(int handle, int ion_fd)
 		rc = 0;
 		goto put_addr_end;
 	}
+	mapping_info->ref_count = 0;
 
 	/* unmapping one buffer from device */
 	rc = cam_smmu_unmap_buf_and_remove_from_list(mapping_info, idx);
