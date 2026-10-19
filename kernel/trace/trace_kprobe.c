@@ -1391,8 +1391,11 @@ create_local_trace_kprobe(char *func, void *addr, unsigned long offs,
 	 * local trace_kprobes are not added to probe_list, so they are never
 	 * searched in find_trace_kprobe(). Therefore, there is no concern of
 	 * duplicated name here.
+	 *
+	 * 4.9: with CONFIG_CFI_CLANG the function body is "<name>.cfi", which
+	 * is not a valid event name; the name is unused, so substitute one.
 	 */
-	event = func ? func : "DUMMY_EVENT";
+	event = func && is_good_name(func) ? func : "DUMMY_EVENT";
 
 	tk = alloc_trace_kprobe(KPROBE_EVENT_SYSTEM, event, (void *)addr, func,
 				offs, 0 /* nargs */,
