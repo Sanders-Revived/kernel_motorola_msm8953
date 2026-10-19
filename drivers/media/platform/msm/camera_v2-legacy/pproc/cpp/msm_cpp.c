@@ -308,39 +308,51 @@ static void msm_cpp_write(u32 data, void __iomem *cpp_base)
 	msm_camera_io_w((data), cpp_base + MSM_CPP_MICRO_FIFO_RX_DATA);
 }
 
+static void msm_cpp_clear_timer_locked(struct cpp_device *cpp_dev)
+{
+	uint32_t i;
+
+	atomic_set(&cpp_timer.used, 0);
+	del_timer(&cpp_timer.cpp_timer);
+	for (i = 0; i < MAX_CPP_PROCESSING_FRAME; i++)
+		cpp_timer.data.processed_frame[i] = NULL;
+	cpp_dev->timeout_trial_cnt = 0;
+}
+
 static void msm_cpp_clear_timer(struct cpp_device *cpp_dev)
 {
-	uint32_t i = 0;
+	unsigned long flags;
 
-	if (atomic_read(&cpp_timer.used)) {
-		atomic_set(&cpp_timer.used, 0);
-		del_timer(&cpp_timer.cpp_timer);
-		for (i = 0; i < MAX_CPP_PROCESSING_FRAME; i++)
-			cpp_timer.data.processed_frame[i] = NULL;
-		cpp_dev->timeout_trial_cnt = 0;
-	}
+	spin_lock_irqsave(&cpp_timer.data.processed_frame_lock, flags);
+	msm_cpp_clear_timer_locked(cpp_dev);
+	spin_unlock_irqrestore(&cpp_timer.data.processed_frame_lock, flags);
 }
 
 static void msm_cpp_timer_queue_update(struct cpp_device *cpp_dev)
 {
-	uint32_t i;
+	uint32_t i, queue_len;
 	unsigned long flags;
-	CPP_DBG("Frame done qlen %d\n", cpp_dev->processing_q.len);
-	if (cpp_dev->processing_q.len <= 1) {
-		msm_cpp_clear_timer(cpp_dev);
+
+	/* Keep the timer shadow and the processing queue in one snapshot. */
+	spin_lock_irqsave(&cpp_timer.data.processed_frame_lock, flags);
+	spin_lock(&cpp_dev->processing_q.lock);
+	queue_len = cpp_dev->processing_q.len;
+	CPP_DBG("Frame done qlen %d\n", queue_len);
+	if (queue_len <= 1) {
+		msm_cpp_clear_timer_locked(cpp_dev);
 	} else {
-		spin_lock_irqsave(&cpp_timer.data.processed_frame_lock, flags);
-		for (i = 0; i < cpp_dev->processing_q.len - 1; i++)
+		for (i = 0; i < queue_len - 1; i++)
 			cpp_timer.data.processed_frame[i] =
 				cpp_timer.data.processed_frame[i + 1];
-		cpp_timer.data.processed_frame[i] = NULL;
+		cpp_timer.data.processed_frame[queue_len - 1] = NULL;
 		cpp_dev->timeout_trial_cnt = 0;
-		spin_unlock_irqrestore(&cpp_timer.data.processed_frame_lock,
-			flags);
+	}
+	spin_unlock(&cpp_dev->processing_q.lock);
+	spin_unlock_irqrestore(&cpp_timer.data.processed_frame_lock, flags);
 
+	if (queue_len > 1)
 		mod_timer(&cpp_timer.cpp_timer,
 			jiffies + msecs_to_jiffies(CPP_CMD_TIMEOUT_MS));
-	}
 }
 
 static uint32_t msm_cpp_read(void __iomem *cpp_base)
@@ -1627,15 +1639,11 @@ static int msm_cpp_dump_frame_cmd(struct msm_cpp_frame_info_t *frame_info)
 
 static void msm_cpp_flush_queue_and_release_buffer(struct cpp_device *cpp_dev,
 	int queue_len) {
-	uint32_t i;
-
 	while (queue_len) {
 		msm_cpp_notify_frame_done(cpp_dev, 1);
 		queue_len--;
 	}
-	atomic_set(&cpp_timer.used, 0);
-	for (i = 0; i < MAX_CPP_PROCESSING_FRAME; i++)
-		cpp_timer.data.processed_frame[i] = NULL;
+	msm_cpp_clear_timer(cpp_dev);
 }
 
 static void msm_cpp_set_micro_irq_mask(struct cpp_device *cpp_dev,
@@ -1653,17 +1661,23 @@ static void msm_cpp_do_timeout_work(struct work_struct *work)
 {
 	uint32_t j = 0, i = 0, i1 = 0, i2 = 0;
 	int32_t queue_len = 0, rc = 0, fifo_counter = 0;
+	unsigned long flags;
 	struct msm_device_queue *queue = NULL;
+	struct msm_queue_cmd *queue_cmd = NULL;
 	struct msm_cpp_frame_info_t *processed_frame[MAX_CPP_PROCESSING_FRAME];
 	struct cpp_device *cpp_dev = cpp_timer.data.cpp_dev;
 
 	pr_warn("cpp_timer_callback called. (jiffies=%lu)\n",
 		jiffies);
+	if (!cpp_dev) {
+		pr_err("timeout work without cpp device\n");
+		return;
+	}
 	mutex_lock(&cpp_dev->mutex);
 
-	if (!work || (cpp_timer.data.cpp_dev->state != CPP_STATE_ACTIVE)) {
+	if (!work || (cpp_dev->state != CPP_STATE_ACTIVE)) {
 		pr_err("Invalid work:%pK or state:%d\n", work,
-			cpp_timer.data.cpp_dev->state);
+			cpp_dev->state);
 		/* Do not flush queue here as it is not a fatal error */
 		goto end;
 	}
@@ -1673,22 +1687,33 @@ static void msm_cpp_do_timeout_work(struct work_struct *work)
 		goto end;
 	}
 
-	msm_camera_enable_irq(cpp_timer.data.cpp_dev->irq, false);
+	msm_camera_enable_irq(cpp_dev->irq, false);
 	/* make sure all the pending queued entries are scheduled */
 	tasklet_kill(&cpp_dev->cpp_tasklet);
 
-	queue = &cpp_timer.data.cpp_dev->processing_q;
-	queue_len = queue->len;
+	queue = &cpp_dev->processing_q;
+	/* The list is authoritative; processed_frame[] is only a shadow. */
+	spin_lock_irqsave(&queue->lock, flags);
+	list_for_each_entry(queue_cmd, &queue->list, list_frame) {
+		queue_len++;
+		if (queue_len <= MAX_CPP_PROCESSING_FRAME)
+			processed_frame[queue_len - 1] = queue_cmd->command;
+	}
+	spin_unlock_irqrestore(&queue->lock, flags);
+	if (queue_len > MAX_CPP_PROCESSING_FRAME) {
+		pr_err("processing queue overflow: %d\n", queue_len);
+		goto error;
+	}
 	if (!queue_len) {
 		pr_err("%s:%d: irq serviced after timeout.Ignore timeout\n",
 			__func__, __LINE__);
+		msm_cpp_clear_timer(cpp_dev);
 		msm_cpp_set_micro_irq_mask(cpp_dev, 1, 0x8);
 		goto end;
 	}
 
 	pr_debug("Reloading firmware %d\n", queue_len);
-	rc = cpp_load_fw(cpp_timer.data.cpp_dev,
-		cpp_timer.data.cpp_dev->fw_name_bin);
+	rc = cpp_load_fw(cpp_dev, cpp_dev->fw_name_bin);
 	if (rc) {
 		pr_warn("Firmware loading failed-retry\n");
 		rc = msm_cpp_reset_vbif_and_load_fw(cpp_dev);
@@ -1717,7 +1742,6 @@ static void msm_cpp_do_timeout_work(struct work_struct *work)
 	}
 
 	for (i = 0; i < queue_len; i++) {
-		processed_frame[i] = cpp_timer.data.processed_frame[i];
 		if (!processed_frame[i]) {
 			pr_warn("process frame null , queue len %d", queue_len);
 			msm_cpp_flush_queue_and_release_buffer(cpp_dev,
@@ -1808,7 +1832,7 @@ static void msm_cpp_do_timeout_work(struct work_struct *work)
 		pr_debug("After frame:%d write\n", i+1);
 	}
 
-	cpp_timer.data.cpp_dev->timeout_trial_cnt++;
+	cpp_dev->timeout_trial_cnt++;
 
 end:
 	mutex_unlock(&cpp_dev->mutex);
@@ -1844,17 +1868,28 @@ static int msm_cpp_send_frame_to_hardware(struct cpp_device *cpp_dev,
 	struct msm_queue_cmd *qcmd = NULL;
 	uint32_t queue_len = 0, fifo_counter = 0;
 
-	if (cpp_dev->processing_q.len < MAX_CPP_PROCESSING_FRAME) {
-		process_frame = frame_qcmd->command;
-		msm_cpp_dump_frame_cmd(process_frame);
-		spin_lock_irqsave(&cpp_timer.data.processed_frame_lock, flags);
-		msm_enqueue(&cpp_dev->processing_q,
-			&frame_qcmd->list_frame);
-		cpp_timer.data.processed_frame[cpp_dev->processing_q.len - 1] =
-			process_frame;
-		queue_len = cpp_dev->processing_q.len;
+	process_frame = frame_qcmd->command;
+	msm_cpp_dump_frame_cmd(process_frame);
+	spin_lock_irqsave(&cpp_timer.data.processed_frame_lock, flags);
+	spin_lock(&cpp_dev->processing_q.lock);
+	if (cpp_dev->processing_q.len >= MAX_CPP_PROCESSING_FRAME) {
+		spin_unlock(&cpp_dev->processing_q.lock);
 		spin_unlock_irqrestore(&cpp_timer.data.processed_frame_lock,
 			flags);
+		pr_err("process queue full. drop frame\n");
+		goto end;
+	}
+	cpp_dev->processing_q.len++;
+	if (cpp_dev->processing_q.len > cpp_dev->processing_q.max)
+		cpp_dev->processing_q.max = cpp_dev->processing_q.len;
+	list_add_tail(&frame_qcmd->list_frame, &cpp_dev->processing_q.list);
+	cpp_timer.data.processed_frame[cpp_dev->processing_q.len - 1] =
+		process_frame;
+	queue_len = cpp_dev->processing_q.len;
+	wake_up(&cpp_dev->processing_q.wait);
+	spin_unlock(&cpp_dev->processing_q.lock);
+	spin_unlock_irqrestore(&cpp_timer.data.processed_frame_lock,
+		flags);
 		atomic_set(&cpp_timer.used, 1);
 
 		CPP_DBG("Starting timer to fire in %d ms. (jiffies=%lu)\n",
@@ -1924,22 +1959,25 @@ static int msm_cpp_send_frame_to_hardware(struct cpp_device *cpp_dev,
 
 		do_gettimeofday(&(process_frame->in_time));
 		rc = 0;
-	} else {
-		pr_err("process queue full. drop frame\n");
-		goto end;
-	}
 
 dequeue_frame:
 	if (rc < 0) {
-		qcmd = msm_dequeue(&cpp_dev->processing_q, list_frame,
-			POP_BACK);
+		spin_lock_irqsave(&cpp_timer.data.processed_frame_lock, flags);
+		spin_lock(&cpp_dev->processing_q.lock);
+		if (!list_empty(&cpp_dev->processing_q.list)) {
+			cpp_dev->processing_q.len--;
+			qcmd = list_last_entry(&cpp_dev->processing_q.list,
+				struct msm_queue_cmd, list_frame);
+			list_del_init(&qcmd->list_frame);
+			cpp_timer.data.processed_frame[cpp_dev->processing_q.len] =
+				NULL;
+		}
+		queue_len = cpp_dev->processing_q.len;
+		spin_unlock(&cpp_dev->processing_q.lock);
+		spin_unlock_irqrestore(&cpp_timer.data.processed_frame_lock,
+			flags);
 		if (!qcmd)
 			pr_warn("%s:%d: no queue cmd\n", __func__, __LINE__);
-		spin_lock_irqsave(&cpp_timer.data.processed_frame_lock,
-			flags);
-		queue_len = cpp_dev->processing_q.len;
-		spin_unlock_irqrestore(
-			&cpp_timer.data.processed_frame_lock, flags);
 		if (queue_len == 0) {
 			atomic_set(&cpp_timer.used, 0);
 			del_timer(&cpp_timer.cpp_timer);
@@ -2777,17 +2815,17 @@ void msm_cpp_clean_queue(struct cpp_device *cpp_dev)
 	struct msm_cpp_frame_info_t *processed_frame = NULL;
 	struct msm_device_queue *queue = NULL;
 
-	while (cpp_dev->processing_q.len) {
-		pr_debug("queue len:%d\n", cpp_dev->processing_q.len);
-		queue = &cpp_dev->processing_q;
+	queue = &cpp_dev->processing_q;
+	for (;;) {
 		frame_qcmd = msm_dequeue(queue, list_frame, POP_FRONT);
-		if (frame_qcmd) {
-			processed_frame = frame_qcmd->command;
-			kfree(frame_qcmd);
-			if (processed_frame)
-				kfree(processed_frame->cpp_cmd_msg);
-			kfree(processed_frame);
-		}
+		if (!frame_qcmd)
+			break;
+		pr_debug("cleaning processing queue\n");
+		processed_frame = frame_qcmd->command;
+		kfree(frame_qcmd);
+		if (processed_frame)
+			kfree(processed_frame->cpp_cmd_msg);
+		kfree(processed_frame);
 	}
 }
 
