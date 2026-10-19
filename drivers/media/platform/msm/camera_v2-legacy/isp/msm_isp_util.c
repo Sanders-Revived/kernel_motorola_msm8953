@@ -2328,6 +2328,41 @@ void msm_isp_end_avtimer(void)
 }
 #endif
 
+static void msm_isp_release_all_streams(struct vfe_device *vfe_dev)
+{
+	struct msm_vfe_axi_stream_release_cmd axi_release[VFE_AXI_SRC_MAX];
+	struct msm_vfe_stats_stream_release_cmd stats_release[MSM_ISP_STATS_MAX];
+	struct msm_vfe_axi_stream *axi_stream;
+	struct msm_vfe_stats_stream *stats_stream;
+	unsigned long flags;
+	int i;
+	int num_axi = 0;
+	int num_stats = 0;
+
+	/* A daemon can exit without issuing the userspace release ioctls. */
+	for (i = 0; i < VFE_AXI_SRC_MAX; i++) {
+		axi_stream = &vfe_dev->axi_data.stream_info[i];
+		spin_lock_irqsave(&axi_stream->lock, flags);
+		if (axi_stream->state != AVAILABLE)
+			axi_release[num_axi++].stream_handle =
+				axi_stream->stream_handle;
+		spin_unlock_irqrestore(&axi_stream->lock, flags);
+	}
+
+	for (i = 0; i < num_axi; i++)
+		msm_isp_release_axi_stream(vfe_dev, &axi_release[i]);
+
+	for (i = 0; i < MSM_ISP_STATS_MAX; i++) {
+		stats_stream = &vfe_dev->stats_data.stream_info[i];
+		if (stats_stream->state != STATS_AVALIABLE)
+			stats_release[num_stats++].stream_handle =
+				stats_stream->stream_handle;
+	}
+
+	for (i = 0; i < num_stats; i++)
+		msm_isp_release_stats_stream(vfe_dev, &stats_release[i]);
+}
+
 int msm_isp_close_node(struct v4l2_subdev *sd, struct v4l2_subdev_fh *fh)
 {
 	long rc = 0;
@@ -2373,6 +2408,7 @@ int msm_isp_close_node(struct v4l2_subdev *sd, struct v4l2_subdev_fh *fh)
 		mutex_unlock(&vfe_dev->realtime_mutex);
 		return 0;
 	}
+	msm_isp_release_all_streams(vfe_dev);
 	/* Unregister page fault handler */
 	cam_smmu_reg_client_page_fault_handler(
 		vfe_dev->buf_mgr->iommu_hdl,

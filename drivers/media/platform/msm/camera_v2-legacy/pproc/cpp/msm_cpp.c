@@ -330,7 +330,7 @@ static void msm_cpp_clear_timer(struct cpp_device *cpp_dev)
 
 static void msm_cpp_timer_queue_update(struct cpp_device *cpp_dev)
 {
-	uint32_t i, queue_len;
+	uint32_t i, queue_len = 0;
 	unsigned long flags;
 
 	/* Keep the timer shadow and the processing queue in one snapshot. */

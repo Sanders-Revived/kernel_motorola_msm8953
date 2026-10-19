@@ -114,6 +114,10 @@ static struct msm_isp_buffer *msm_isp_get_buf_ptr(
 		pr_err("%s: Invalid buf index\n", __func__);
 		return buf_info;
 	}
+	if (!bufq->bufs) {
+		pr_err("%s: Buffer queue is not allocated\n", __func__);
+		return buf_info;
+	}
 	buf_info = &bufq->bufs[buf_index];
 	return buf_info;
 }
@@ -126,7 +130,8 @@ static uint32_t msm_isp_get_buf_handle(
 	uint32_t embedded_stream_id = 0;
 
 	for (i = 0; i < buf_mgr->num_buf_q; i++) {
-		if (buf_mgr->bufq[i].session_id == session_id &&
+		if (buf_mgr->bufq[i].bufq_handle &&
+			buf_mgr->bufq[i].session_id == session_id &&
 			buf_mgr->bufq[i].stream_id == stream_id)
 			return 0;
 	}
@@ -138,7 +143,8 @@ static uint32_t msm_isp_get_buf_handle(
 		embedded_stream_id = stream_id;
 
 	for (i = 0; i < buf_mgr->num_buf_q; i++) {
-		if (buf_mgr->bufq[i].bufq_handle == 0) {
+		if (buf_mgr->bufq[i].bufq_handle == 0 &&
+			buf_mgr->bufq[i].bufs == NULL) {
 			buf_mgr->bufq[i].bufq_handle =
 				embedded_stream_id << 8 | i;
 			return buf_mgr->bufq[i].bufq_handle;
@@ -155,14 +161,13 @@ static int msm_isp_free_bufq_handle(struct msm_isp_buf_mgr *buf_mgr,
 	if (!bufq)
 		return -EINVAL;
 
-	/* Set everything except lock to 0 */
+	/*
+	 * VFE callbacks can still retain a pointer to this queue after the
+	 * release ioctl returns.  Invalidate the handle, but keep the buffer
+	 * allocation alive until buf_mgr_deinit(), after release_hw() has
+	 * stopped the tasklets.  Quarantined slots are not reused.
+	 */
 	bufq->bufq_handle = 0;
-	bufq->bufs = 0;
-	bufq->session_id = 0;
-	bufq->stream_id = 0;
-	bufq->num_bufs = 0;
-	bufq->buf_type = 0;
-	INIT_LIST_HEAD(&bufq->head);
 
 	return 0;
 }
@@ -367,23 +372,16 @@ static int msm_isp_buf_prepare(struct msm_isp_buf_mgr *buf_mgr,
 }
 
 static int msm_isp_buf_unprepare_all(struct msm_isp_buf_mgr *buf_mgr,
-	uint32_t buf_handle)
+	struct msm_isp_bufq *bufq)
 {
-	int rc = -1, i;
-	struct msm_isp_bufq *bufq = NULL;
+	int i;
 	struct msm_isp_buffer *buf_info = NULL;
-	bufq = msm_isp_get_bufq(buf_mgr, buf_handle);
-	if (!bufq) {
-		pr_err("%s: Invalid bufq\n", __func__);
-		return rc;
-	}
+
+	if (!bufq || !bufq->bufs)
+		return -EINVAL;
 
 	for (i = 0; i < bufq->num_bufs; i++) {
-		buf_info = msm_isp_get_buf_ptr(buf_mgr, buf_handle, i);
-		if (!buf_info) {
-			pr_err("%s: buf not found\n", __func__);
-			return rc;
-		}
+		buf_info = &bufq->bufs[i];
 		if (buf_info->state == MSM_ISP_BUFFER_STATE_UNUSED ||
 				buf_info->state ==
 					MSM_ISP_BUFFER_STATE_INITIALIZED)
@@ -426,7 +424,7 @@ static int msm_isp_get_buf_by_index(struct msm_isp_buf_mgr *buf_mgr,
 	}
 
 	*buf_info = NULL;
-	for (i = 0; bufq->num_bufs; i++) {
+	for (i = 0; i < bufq->num_bufs; i++) {
 		temp_buf_info = &bufq->bufs[i];
 		if (temp_buf_info && temp_buf_info->buf_idx == buf_index) {
 			*buf_info = temp_buf_info;
@@ -1037,7 +1035,8 @@ static int msm_isp_get_bufq_handle(struct msm_isp_buf_mgr *buf_mgr,
 {
 	int i;
 	for (i = 0; i < buf_mgr->num_buf_q; i++) {
-		if (buf_mgr->bufq[i].session_id == session_id &&
+		if (buf_mgr->bufq[i].bufq_handle &&
+			buf_mgr->bufq[i].session_id == session_id &&
 			buf_mgr->bufq[i].stream_id == stream_id) {
 			return buf_mgr->bufq[i].bufq_handle;
 		}
@@ -1133,10 +1132,8 @@ static int msm_isp_release_bufq(struct msm_isp_buf_mgr *buf_mgr,
 		return -EINVAL;
 	}
 
-	msm_isp_buf_unprepare_all(buf_mgr, bufq_handle);
-
 	spin_lock_irqsave(&bufq->bufq_lock, flags);
-	kfree(bufq->bufs);
+	/* Keep the allocation and mappings quarantined until buf_mgr_deinit(). */
 	msm_isp_free_bufq_handle(buf_mgr, bufq_handle);
 	spin_unlock_irqrestore(&bufq->bufq_lock, flags);
 
@@ -1151,14 +1148,23 @@ static void msm_isp_release_all_bufq(
 	int i;
 	for (i = 0; i < buf_mgr->num_buf_q; i++) {
 		bufq = &buf_mgr->bufq[i];
-		if (!bufq->bufq_handle)
+		if (!bufq->bufq_handle && !bufq->bufs)
 			continue;
 
-		msm_isp_buf_unprepare_all(buf_mgr, bufq->bufq_handle);
+		/* Hardware is stopped before buf_mgr_deinit(), so it is now safe to
+		 * unmap buffers that were quarantined by msm_isp_release_bufq(). */
+		if (bufq->bufs)
+			msm_isp_buf_unprepare_all(buf_mgr, bufq);
 
 		spin_lock_irqsave(&bufq->bufq_lock, flags);
 		kfree(bufq->bufs);
-		msm_isp_free_bufq_handle(buf_mgr, bufq->bufq_handle);
+		bufq->bufs = NULL;
+		bufq->bufq_handle = 0;
+		bufq->session_id = 0;
+		bufq->stream_id = 0;
+		bufq->num_bufs = 0;
+		bufq->buf_type = 0;
+		INIT_LIST_HEAD(&bufq->head);
 		spin_unlock_irqrestore(&bufq->bufq_lock, flags);
 	}
 }
