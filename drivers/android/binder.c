@@ -4883,6 +4883,14 @@ static int binder_thread_release(struct binder_proc *proc,
 	 * survives while we are releasing it
 	 */
 	atomic_inc(&thread->tmp_ref);
+	/*
+	 * A thread can be asleep in binder_wait_for_work() while it is
+	 * linked on proc->waiting_threads.  Remove that link before the
+	 * thread is detached and eventually freed; otherwise the list keeps
+	 * a pointer into the freed binder_thread and the next transaction
+	 * selection can trip list_del corruption.
+	 */
+	list_del_init(&thread->waiting_thread_node);
 	rb_erase(&thread->rb_node, &proc->threads);
 	t = thread->transaction_stack;
 	if (t) {
