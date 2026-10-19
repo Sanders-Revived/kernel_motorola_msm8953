@@ -8167,7 +8167,7 @@ static void bpf_overflow_handler(struct perf_event *event,
 {
 	struct bpf_perf_event_data_kern ctx = {
 		.data = data,
-		.regs = regs,
+		.regs = perf_arch_bpf_user_pt_regs(regs),
 		.event = event,
 	};
 	int ret = 0;
