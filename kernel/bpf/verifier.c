@@ -7537,6 +7537,8 @@ static int propagate_precision(struct bpf_verifier_env *env,
 			    !state_reg->precise ||
 			    !(state_reg->live & REG_LIVE_READ))
 				continue;
+			if (fr != old->curframe)
+				goto conservative;
 			if (env->log.level & BPF_LOG_LEVEL2)
 				verbose(env, "frame %d: propagating r%d\n", fr, i);
 			err = mark_chain_precision_frame(env, fr, i);
@@ -7552,6 +7554,8 @@ static int propagate_precision(struct bpf_verifier_env *env,
 			    !state_reg->precise ||
 			    !(state_reg->live & REG_LIVE_READ))
 				continue;
+			if (fr != old->curframe)
+				goto conservative;
 			if (env->log.level & BPF_LOG_LEVEL2)
 				verbose(env, "frame %d: propagating fp%d\n",
 					fr, (-i - 1) * BPF_REG_SIZE);
@@ -7560,6 +7564,22 @@ static int propagate_precision(struct bpf_verifier_env *env,
 				return err;
 		}
 	}
+	return 0;
+
+conservative:
+	/* Backtracking walks the jump history of the deepest frame only, so
+	 * it cannot follow a register or slot of an outer frame: an insn in
+	 * the callee writing the same register number would wrongly end the
+	 * walk. Upstream fixed this with struct backtrack_state, which this
+	 * verifier lacks, so fall back to conservative marking here.
+	 */
+	if (!env->allow_ptr_leaks)
+		/* backtracking is root only for now */
+		return 0;
+	if (env->log.level & BPF_LOG_LEVEL2)
+		verbose(env, "frame %d: precise outer frame, marking all scalars precise\n",
+			fr);
+	mark_all_scalars_precise(env, env->cur_state);
 	return 0;
 }
 
