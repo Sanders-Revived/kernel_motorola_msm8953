@@ -6489,6 +6489,7 @@ static int check_return_code(struct bpf_verifier_env *env)
 	struct tnum enforce_attach_type_range = tnum_unknown;
 	struct bpf_reg_state *reg;
 	struct tnum range = tnum_range(0, 1);
+	int err;
 
 	switch (env->prog->type) {
 	case BPF_PROG_TYPE_CGROUP_SOCK_ADDR:
@@ -6518,6 +6519,10 @@ static int check_return_code(struct bpf_verifier_env *env)
 			reg_type_str[reg->type]);
 		return -EINVAL;
 	}
+
+	err = mark_chain_precision(env, BPF_REG_0);
+	if (err)
+		return err;
 
 	if (!tnum_in(range, reg->var_off)) {
 		char tn_buf[48];
