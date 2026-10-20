@@ -106,6 +106,7 @@ struct bpf_map {
 #endif
 	struct bpf_map *inner_map_meta;
 	char name[BPF_OBJ_NAME_LEN];
+	atomic64_t writecnt;
 };
 
 static inline bool map_value_has_spin_lock(const struct bpf_map *map)
@@ -666,6 +667,7 @@ void bpf_map_charge_move(struct bpf_map_memory *dst,
 			 struct bpf_map_memory *src);
 void *bpf_map_area_alloc(u64 size, int numa_node);
 void bpf_map_area_free(void *base);
+bool bpf_map_write_active(const struct bpf_map *map);
 void bpf_map_init_from_attr(struct bpf_map *map, union bpf_attr *attr);
 
 extern int sysctl_unprivileged_bpf_disabled;
