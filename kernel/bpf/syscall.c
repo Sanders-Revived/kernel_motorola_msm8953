@@ -1231,8 +1231,7 @@ static void free_used_maps(struct bpf_prog_aux *aux)
 	for_each_cgroup_storage_type(stype) {
 		if (!aux->cgroup_storage[stype])
 			continue;
-		bpf_cgroup_storage_release(aux->prog,
-					   aux->cgroup_storage[stype]);
+		bpf_cgroup_storage_release(aux, aux->cgroup_storage[stype]);
 	}
 
 	for (i = 0; i < aux->used_map_cnt; i++)
