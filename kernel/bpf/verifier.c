@@ -3412,9 +3412,12 @@ static int check_func_arg(struct bpf_verifier_env *env, u32 regno,
 	    arg_type == ARG_PTR_TO_MAP_VALUE_OR_NULL) {
 		expected_type = PTR_TO_STACK;
 		if (register_is_null(reg) &&
-		    arg_type == ARG_PTR_TO_MAP_VALUE_OR_NULL)
-			/* final test in check_stack_boundary() */;
-		else if (!type_is_pkt_pointer(type) &&
+		    arg_type == ARG_PTR_TO_MAP_VALUE_OR_NULL) {
+			/* final test in check_stack_boundary() */
+			err = mark_chain_precision(env, regno);
+			if (err)
+				return err;
+		} else if (!type_is_pkt_pointer(type) &&
 			 type != PTR_TO_MAP_VALUE &&
 			 type != expected_type)
 			goto err_type;
@@ -3470,9 +3473,12 @@ static int check_func_arg(struct bpf_verifier_env *env, u32 regno,
 		 * happens during stack boundary checking.
 		 */
 		if (register_is_null(reg) &&
-		    arg_type == ARG_PTR_TO_MEM_OR_NULL)
-			/* final test in check_stack_boundary() */;
-		else if (!type_is_pkt_pointer(type) &&
+		    arg_type == ARG_PTR_TO_MEM_OR_NULL) {
+			/* final test in check_stack_boundary() */
+			err = mark_chain_precision(env, regno);
+			if (err)
+				return err;
+		} else if (!type_is_pkt_pointer(type) &&
 			 type != PTR_TO_MAP_VALUE &&
 			 type != expected_type)
 			goto err_type;
@@ -4259,10 +4265,14 @@ static int check_helper_call(struct bpf_verifier_env *env, int func_id, int insn
 	/* check that flags argument in get_local_storage(map, flags) is 0,
 	 * this is required because get_local_storage() can't return an error.
 	 */
-	if (func_id == BPF_FUNC_get_local_storage &&
-	    !register_is_null(&regs[BPF_REG_2])) {
-		verbose(env, "get_local_storage() doesn't support non-zero flags\n");
-		return -EINVAL;
+	if (func_id == BPF_FUNC_get_local_storage) {
+		if (!register_is_null(&regs[BPF_REG_2])) {
+			verbose(env, "get_local_storage() doesn't support non-zero flags\n");
+			return -EINVAL;
+		}
+		err = mark_chain_precision(env, BPF_REG_2);
+		if (err)
+			return err;
 	}
 
 	/* reset caller saved regs */
