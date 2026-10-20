@@ -127,3 +127,7 @@ Android.bp
 # Object directory
 out/
 tc/
+
+KernelSU/
+drivers/kernelsu
+*.zip

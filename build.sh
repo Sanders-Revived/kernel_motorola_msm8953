@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # Aurora Kernel build - sanders (Moto G5s Plus)
-# KSU OFF by default; use --ksu to build with ReSukiSU.
+# KSU OFF by default; use --ksu to build with BakaSU.
 #
 
 SECONDS=0
@@ -11,8 +11,8 @@ DEVICE="sanders"
 DEVICE_NAME="Moto G5s Plus"
 DEFCONFIG="sanders_defconfig"
 
-# ===== ReSukiSU (default: OFF, enable with --ksu) =====
-KSU_REPO="https://github.com/ReSukiSU/ReSukiSU"
+# ===== BakaSU (default: OFF, enable with --ksu) =====
+KSU_REPO="https://github.com/Baka-SU/BakaSU"
 KSU_DIR="$(pwd)/KernelSU"
 WITH_KSU="${WITH_KSU:-0}"
 KSU_REF="${KSU_REF:-main}"
@@ -69,11 +69,11 @@ if [ "$CLEAN" -eq 1 ]; then
     rm -rf out
 fi
 
-# ===== ReSukiSU: driver fetch (KSU builds only) =====
+# ===== BakaSU: driver fetch (KSU builds only) =====
 setup_ksu() {
-    echo "[*] ReSukiSU ref: $KSU_REF"
+    echo "[*] BakaSU ref: $KSU_REF"
     if [ ! -d "$KSU_DIR" ]; then
-        echo "[*] Cloning ReSukiSU..."
+        echo "[*] Cloning BakaSU..."
         git clone "$KSU_REPO" "$KSU_DIR" || return 1
     fi
     (
@@ -93,13 +93,13 @@ setup_ksu() {
         || printf '\nobj-$(CONFIG_KSU) += kernelsu/\n' >> drivers/Makefile
     grep -q 'source "drivers/kernelsu/Kconfig"' drivers/Kconfig \
         || sed -i '/endmenu/i\source "drivers/kernelsu/Kconfig"' drivers/Kconfig
-    echo "[+] ReSukiSU driver ready"
+    echo "[+] BakaSU driver ready"
 }
 
 # ===== Zip suffix =====
 if [ "$WITH_KSU" = "1" ]; then
     KSU_TAG="$(echo "$KSU_REF" | tr '/ ' '__')"
-    VARIANT="KSU-${KSU_TAG}"
+    VARIANT="BakaSU-${KSU_TAG}"
 else
     VARIANT="NoKSU"
 fi
@@ -135,7 +135,15 @@ make O=out ARCH=arm64 $DEFCONFIG
 if [ "$WITH_KSU" = "1" ]; then
     ./scripts/config --file out/.config \
         --enable CONFIG_KSU \
-        --enable CONFIG_KSU_MANUAL_HOOK
+        --disable CONFIG_KSU_TRACEPOINT_HOOK \
+        --enable CONFIG_KSU_MANUAL_HOOK \
+        --disable CONFIG_KSU_MANUAL_HOOK_AUTO_SETUID_HOOK \
+        --disable CONFIG_KSU_MANUAL_HOOK_AUTO_INITRC_HOOK \
+        --disable CONFIG_KSU_MANUAL_HOOK_AUTO_INPUT_HOOK \
+        --enable CONFIG_KSU_MULTI_MANAGER_SUPPORT \
+        --enable CONFIG_KSU_DEBUG \
+        --enable CONFIG_SECURITY_WRITABLE_HOOKS \
+        --enable CONFIG_SECURITY_SELINUX_DISABLE
 else
     ./scripts/config --file out/.config \
         --disable CONFIG_KSU
