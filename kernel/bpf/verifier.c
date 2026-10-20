@@ -3482,6 +3482,11 @@ static int check_func_arg(struct bpf_verifier_env *env, u32 regno,
 		    type != PTR_TO_MAP_VALUE &&
 		    type != expected_type)
 			goto err_type;
+		/* The helper writes its result through this pointer, so
+		 * check the access as a write: a read-only map value must
+		 * be rejected, and stack bytes need not be initialized.
+		 */
+		meta->raw_mode = true;
 	} else {
 		verbose(env, "unsupported arg_type %d\n", arg_type);
 		return -EFAULT;
