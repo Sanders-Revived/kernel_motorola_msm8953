@@ -3582,6 +3582,28 @@ err_type:
 	return -EACCES;
 }
 
+static bool may_delete_sockmap(struct bpf_verifier_env *env)
+{
+	/* It's not possible to get access to a locked struct sock in these
+	 * contexts, so deleting is safe.
+	 */
+	switch (env->prog->type) {
+	case BPF_PROG_TYPE_SOCK_OPS:
+	case BPF_PROG_TYPE_SOCKET_FILTER:
+	case BPF_PROG_TYPE_SCHED_CLS:
+	case BPF_PROG_TYPE_SCHED_ACT:
+	case BPF_PROG_TYPE_XDP:
+	case BPF_PROG_TYPE_SK_REUSEPORT:
+	case BPF_PROG_TYPE_FLOW_DISSECTOR:
+		return true;
+	default:
+		break;
+	}
+
+	verbose(env, "cannot update sockmap in this context\n");
+	return false;
+}
+
 static int check_map_func_compatibility(struct bpf_verifier_env *env,
 					struct bpf_map *map, int func_id)
 {
@@ -3638,6 +3660,9 @@ static int check_map_func_compatibility(struct bpf_verifier_env *env,
 			goto error;
 		break;
 	case BPF_MAP_TYPE_SOCKMAP:
+		if (func_id == BPF_FUNC_map_delete_elem &&
+		    !may_delete_sockmap(env))
+			goto error;
 		if (func_id != BPF_FUNC_sk_redirect_map &&
 		    func_id != BPF_FUNC_sock_map_update &&
 		    func_id != BPF_FUNC_map_delete_elem &&
@@ -3645,6 +3670,9 @@ static int check_map_func_compatibility(struct bpf_verifier_env *env,
 			goto error;
 		break;
 	case BPF_MAP_TYPE_SOCKHASH:
+		if (func_id == BPF_FUNC_map_delete_elem &&
+		    !may_delete_sockmap(env))
+			goto error;
 		if (func_id != BPF_FUNC_sk_redirect_hash &&
 		    func_id != BPF_FUNC_sock_hash_update &&
 		    func_id != BPF_FUNC_map_delete_elem &&
