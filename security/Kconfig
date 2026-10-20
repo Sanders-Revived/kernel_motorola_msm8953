@@ -47,8 +47,8 @@ config SECURITY
 
 config SECURITY_WRITABLE_HOOKS
 	depends on SECURITY
-	bool
-	default n
+	bool "Enable writable security hooks"
+	default y
 
 config PAGE_TABLE_ISOLATION
 	bool "Remove the kernel mapping in user mode"

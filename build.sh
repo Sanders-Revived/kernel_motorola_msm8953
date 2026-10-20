@@ -136,7 +136,14 @@ if [ "$WITH_KSU" = "1" ]; then
     ./scripts/config --file out/.config \
         --enable CONFIG_KSU \
         --disable CONFIG_KSU_TRACEPOINT_HOOK \
-        --enable CONFIG_KSU_MANUAL_HOOK
+        --enable CONFIG_KSU_MANUAL_HOOK \
+        --disable CONFIG_KSU_MANUAL_HOOK_AUTO_SETUID_HOOK \
+        --disable CONFIG_KSU_MANUAL_HOOK_AUTO_INITRC_HOOK \
+        --disable CONFIG_KSU_MANUAL_HOOK_AUTO_INPUT_HOOK \
+        --enable CONFIG_KSU_MULTI_MANAGER_SUPPORT \
+        --enable CONFIG_KSU_DEBUG \
+        --enable CONFIG_SECURITY_WRITABLE_HOOKS \
+        --enable CONFIG_SECURITY_SELINUX_DISABLE
 else
     ./scripts/config --file out/.config \
         --disable CONFIG_KSU
