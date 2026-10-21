@@ -555,6 +555,7 @@ int avtab_read_item(struct avtab *a, void *fp, struct policydb *pol,
 		if (avtab_android_m_compat ||
 			    ((xperms.specified != AVTAB_XPERMS_IOCTLFUNCTION) &&
 			    (xperms.specified != AVTAB_XPERMS_IOCTLDRIVER) &&
+			    (xperms.specified != AVTAB_XPERMS_NLMSG) &&
 			    (vers == POLICYDB_VERSION_XPERMS_IOCTL))) {
 			xperms.driver = xperms.specified;
 			if (android_m_compat_optype)
@@ -576,6 +577,14 @@ int avtab_read_item(struct avtab *a, void *fp, struct policydb *pol,
 		}
 		for (i = 0; i < ARRAY_SIZE(xperms.perms.p); i++)
 			xperms.perms.p[i] = le32_to_cpu(buf32[i]);
+		/*
+		 * Netlink xperms only apply with the netlink_xperm policy
+		 * capability, which this kernel lacks; it checks netlink
+		 * messages through the nlmsg_* permissions instead. The
+		 * ioctl xperm code cannot handle these nodes, so drop them.
+		 */
+		if (xperms.specified == AVTAB_XPERMS_NLMSG)
+			return 0;
 		datum.u.xperms = &xperms;
 	} else {
 		rc = next_entry(buf32, fp, sizeof(u32));
