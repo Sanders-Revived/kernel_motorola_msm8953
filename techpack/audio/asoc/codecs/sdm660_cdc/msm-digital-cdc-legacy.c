@@ -63,7 +63,7 @@ static int tx_unmute_delay = SDM660_TX_UNMUTE_DELAY_MS;
 module_param(tx_unmute_delay, int, 0664);
 MODULE_PARM_DESC(tx_unmute_delay, "delay to unmute the tx path");
 
-static const DECLARE_TLV_DB_SCALE(digital_gain, 0, 1, 0);
+static const DECLARE_TLV_DB_SCALE(digital_gain, -8400, 100, 0);
 
 struct snd_soc_codec *registered_digcodec;
 struct hpf_work tx_hpf_work[NUM_DECIMATORS];
@@ -1823,44 +1823,45 @@ static const struct soc_enum cf_dec4_enum =
 	SOC_ENUM_SINGLE(MSM89XX_CDC_CORE_TX4_MUX_CTL, 4, 3, cf_text);
 
 static const struct snd_kcontrol_new msm_dig_snd_controls[] = {
-	SOC_SINGLE_SX_TLV("DEC1 Volume",
+	/* Digital gain registers contain signed 8-bit dB values. */
+	SOC_SINGLE_S8_TLV("DEC1 Volume",
 		MSM89XX_CDC_CORE_TX1_VOL_CTL_GAIN,
-		0, -84, 40, digital_gain),
-	SOC_SINGLE_SX_TLV("DEC2 Volume",
+		-84, 40, digital_gain),
+	SOC_SINGLE_S8_TLV("DEC2 Volume",
 		  MSM89XX_CDC_CORE_TX2_VOL_CTL_GAIN,
-		0, -84, 40, digital_gain),
-	SOC_SINGLE_SX_TLV("DEC3 Volume",
+		-84, 40, digital_gain),
+	SOC_SINGLE_S8_TLV("DEC3 Volume",
 		  MSM89XX_CDC_CORE_TX3_VOL_CTL_GAIN,
-		0, -84, 40, digital_gain),
-	SOC_SINGLE_SX_TLV("DEC4 Volume",
+		-84, 40, digital_gain),
+	SOC_SINGLE_S8_TLV("DEC4 Volume",
 		  MSM89XX_CDC_CORE_TX4_VOL_CTL_GAIN,
-		0, -84, 40, digital_gain),
+		-84, 40, digital_gain),
 
-	SOC_SINGLE_SX_TLV("IIR1 INP1 Volume",
+	SOC_SINGLE_S8_TLV("IIR1 INP1 Volume",
 			  MSM89XX_CDC_CORE_IIR1_GAIN_B1_CTL,
-			0,  -84, 40, digital_gain),
-	SOC_SINGLE_SX_TLV("IIR1 INP2 Volume",
+			-84, 40, digital_gain),
+	SOC_SINGLE_S8_TLV("IIR1 INP2 Volume",
 			  MSM89XX_CDC_CORE_IIR1_GAIN_B2_CTL,
-			0,  -84, 40, digital_gain),
-	SOC_SINGLE_SX_TLV("IIR1 INP3 Volume",
+			-84, 40, digital_gain),
+	SOC_SINGLE_S8_TLV("IIR1 INP3 Volume",
 			  MSM89XX_CDC_CORE_IIR1_GAIN_B3_CTL,
-			0,  -84, 40, digital_gain),
-	SOC_SINGLE_SX_TLV("IIR1 INP4 Volume",
+			-84, 40, digital_gain),
+	SOC_SINGLE_S8_TLV("IIR1 INP4 Volume",
 			  MSM89XX_CDC_CORE_IIR1_GAIN_B4_CTL,
-			0,  -84,	40, digital_gain),
-	SOC_SINGLE_SX_TLV("IIR2 INP1 Volume",
+			-84, 40, digital_gain),
+	SOC_SINGLE_S8_TLV("IIR2 INP1 Volume",
 			  MSM89XX_CDC_CORE_IIR2_GAIN_B1_CTL,
-			0,  -84, 40, digital_gain),
+			-84, 40, digital_gain),
 
-	SOC_SINGLE_SX_TLV("RX1 Digital Volume",
+	SOC_SINGLE_S8_TLV("RX1 Digital Volume",
 		MSM89XX_CDC_CORE_RX1_VOL_CTL_B2_CTL,
-		0, -84, 40, digital_gain),
-	SOC_SINGLE_SX_TLV("RX2 Digital Volume",
+		-84, 40, digital_gain),
+	SOC_SINGLE_S8_TLV("RX2 Digital Volume",
 		MSM89XX_CDC_CORE_RX2_VOL_CTL_B2_CTL,
-		0, -84, 40, digital_gain),
-	SOC_SINGLE_SX_TLV("RX3 Digital Volume",
+		-84, 40, digital_gain),
+	SOC_SINGLE_S8_TLV("RX3 Digital Volume",
 		MSM89XX_CDC_CORE_RX3_VOL_CTL_B2_CTL,
-		0, -84, 40, digital_gain),
+		-84, 40, digital_gain),
 
 	SOC_SINGLE_EXT("IIR1 Enable Band1", IIR1, BAND1, 1, 0,
 		msm_dig_cdc_get_iir_enable_audio_mixer,
