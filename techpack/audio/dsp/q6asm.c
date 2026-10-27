@@ -2845,6 +2845,9 @@ static int __q6asm_open_read(struct audio_client *ac,
 
 	rc = q6asm_get_asm_topology_apptype(&cal_info);
 	open.preprocopo_id = cal_info.topology_id;
+	/* Older ACDBs can return an empty topology for PCM VoIP capture. */
+	if (!open.preprocopo_id)
+		open.preprocopo_id = ASM_STREAM_PREPROCOPO_ID_NONE;
 
 
 	open.bits_per_sample = bits_per_sample;
