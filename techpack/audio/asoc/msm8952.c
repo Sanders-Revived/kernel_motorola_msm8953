@@ -45,6 +45,9 @@
 #define MSM_INT_DIGITAL_CODEC "msm-dig-codec"
 #define PMIC_INT_ANALOG_CODEC "analog-codec"
 
+#define MSM8952_MM6_PCM_DEVICE 18
+#define MSM8952_MM7_PCM_DEVICE 24
+
 enum btsco_rates {
 	RATE_8KHZ_ID,
 	RATE_16KHZ_ID,
@@ -3181,6 +3184,15 @@ static struct snd_soc_card *msm8952_populate_sndcard_dailinks(
 	len1 = ARRAY_SIZE(msm8952_dai);
 	memcpy(msm8952_dai_links, msm8952_dai, sizeof(msm8952_dai));
 	dailink = msm8952_dai_links;
+	if (of_machine_is_compatible("qcom,msm8953-sanders")) {
+		/*
+		 * Upstream libhfp uses the generic PCM 24 for MultiMedia6.
+		 * Exchange only MM6/MM7; keep the voice frontend IDs stable.
+		 * Sanders audio_platform_info.xml maps Compress2 to PCM 18.
+		 */
+		swap(dailink[MSM8952_MM6_PCM_DEVICE],
+		     dailink[MSM8952_MM7_PCM_DEVICE]);
+	}
 	if (of_property_read_bool(dev->of_node,
 				"qcom,hdmi-dba-codec-rx")) {
 		dev_dbg(dev, "%s(): hdmi audio support present\n",
