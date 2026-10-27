@@ -383,7 +383,8 @@ reserved-memory {
 
 	sound {
 		status = "okay";
-		qcom,model = "msm8953-snd-card";
+		/* Mono internal-codec name recognized by the upstream audio HAL. */
+		qcom,model = "msm8953-sku4-snd-card";
 		qcom,msm-mbhc-hphl-swh = <1>;
 		qcom,msm-mbhc-gnd-swh = <0>;
 		qcom,msm-micbias1-ext-cap;
