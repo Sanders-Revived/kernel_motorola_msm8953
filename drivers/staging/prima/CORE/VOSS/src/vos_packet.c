@@ -47,6 +47,7 @@
 #include <vos_trace.h>
 #include <wlan_hdd_main.h>   
 #include <linux/wcnss_wlan.h>
+#include <linux/kmemcheck.h>
 
 /*--------------------------------------------------------------------------
   Preprocessor definitions and constants
