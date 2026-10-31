@@ -24532,7 +24532,7 @@ tANI_U32 dot11fGetPackedDelBAIndSize(tpAniSirGlobal pCtx, tDot11fDelBAInd *pFrm,
 tANI_U32 dot11fGetPackedDelTSSize(tpAniSirGlobal pCtx, tDot11fDelTS *pFrm, tANI_U32 *pnNeeded)
 {
     tANI_U32 status = 0;
-    *pnNeeded = 7;
+    *pnNeeded = 8;
     status = GetPackedSizeCore(pCtx, ( tANI_U8* )pFrm, pnNeeded, IES_DelTS);
     return status;
 } /* End dot11fGetPackedDelTSSize. */

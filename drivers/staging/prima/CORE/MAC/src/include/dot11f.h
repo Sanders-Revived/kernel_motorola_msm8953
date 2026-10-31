@@ -546,7 +546,7 @@ typedef struct sDot11fFfTSInfo {
     tANI_U32          unused: 15;
 } tDot11fFfTSInfo;
 
-#define DOT11F_FF_TSINFO_LEN ( 3 )
+#define DOT11F_FF_TSINFO_LEN ( 4 )
 
 void dot11fUnpackFfTSInfo(tpAniSirGlobal, tANI_U8*, tDot11fFfTSInfo*);
 
