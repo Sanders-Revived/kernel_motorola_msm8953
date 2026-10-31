@@ -303,6 +303,24 @@ TRACE_EVENT(binder_transaction_fd_recv,
 		  __entry->debug_id, __entry->fd, __entry->offset)
 );
 
+TRACE_EVENT(binder_transaction_fd,
+	TP_PROTO(struct binder_transaction *t, int fd, int target_fd),
+	TP_ARGS(t, fd, target_fd),
+
+	TP_STRUCT__entry(
+		__field(int, debug_id)
+		__field(int, fd)
+		__field(int, target_fd)
+	),
+	TP_fast_assign(
+		__entry->debug_id = t->debug_id;
+		__entry->fd = fd;
+		__entry->target_fd = target_fd;
+	),
+	TP_printk("transaction=%d src_fd=%d dest_fd=%d",
+		  __entry->debug_id, __entry->fd, __entry->target_fd)
+);
+
 DECLARE_EVENT_CLASS(binder_buffer_class,
 	TP_PROTO(struct binder_buffer *buf),
 	TP_ARGS(buf),
