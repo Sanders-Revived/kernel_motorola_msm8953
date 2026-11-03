@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 
-#include <linux/compiler_types.h>
+#include <linux/compiler.h>
 #include <linux/errno.h>
 #include <linux/fs.h>
 #include <linux/fsnotify.h>
@@ -34,6 +34,9 @@
 #include <uapi/linux/android/binderfs.h>
 
 #include "binder_internal.h"
+
+#define ida_alloc_max(a, b, c) ida_simple_get(a, 0, b + 1, c)
+#define ida_free ida_remove
 
 #define FIRST_INODE 1
 #define SECOND_INODE 2
@@ -714,7 +717,7 @@ static int binderfs_fill_super(struct super_block *sb, void *data, int silent)
 	int ret;
 	struct binderfs_info *info;
 	struct inode *inode = NULL;
-	struct binderfs_device device_info = {};
+	struct binderfs_device device_info = { 0 };
 	const char *name;
 	size_t len;
 
