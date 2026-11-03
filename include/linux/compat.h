@@ -6,6 +6,7 @@
  */
 
 #include <linux/types.h>
+#include <linux/time64.h>
 
 #ifdef CONFIG_COMPAT
 
