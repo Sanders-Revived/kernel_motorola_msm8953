@@ -69,42 +69,16 @@
 #include "ebitmap.h"
 #include "audit.h"
 
-int selinux_policycap_netpeer;
-int selinux_policycap_openperm;
-int selinux_policycap_alwaysnetwork;
-
-static DEFINE_RWLOCK(policy_rwlock);
-
-static struct sidtab sidtab;
-struct policydb policydb;
-int ss_initialized;
-
-/*
- * The largest sequence number that has been used when
- * providing an access decision to the access vector cache.
- * The sequence number only changes when a policy change
- * occurs.
- */
-static u32 latest_granting;
-
-/* Forward declaration. */
-static int context_struct_to_string(struct context *context, char **scontext,
-				    u32 *scontext_len);
-
-static void context_struct_compute_av(struct context *scontext,
-					struct context *tcontext,
-					u16 tclass,
-					struct av_decision *avd,
-					struct extended_perms *xperms);
-
-struct selinux_mapping {
-	u16 value; /* policy value */
-	unsigned num_perms;
-	u32 perms[sizeof(u32) * 8];
+/* Policy capability names */
+const char *selinux_policycap_names[__POLICYDB_CAPABILITY_MAX] = {
+	"network_peer_controls",
+	"open_perms",
+	"compat1",
+	"always_check_network",
+	"compat2",
+	"nnp_nosuid_transition"
 };
 
-int selinux_android_netlink_route;
-int selinux_android_netlink_getneigh;
 static struct selinux_ss selinux_ss;
 
 void selinux_ss_init(struct selinux_ss **ss)
@@ -990,7 +964,10 @@ void services_compute_xperms_decision(struct extended_perms_decision *xpermd,
 					xpermd->driver))
 			return;
 	} else {
-		BUG();
+		pr_warn_once(
+			"SELinux: unknown extended permission (%u) will be ignored\n",
+			node->datum.u.xperms->specified);
+		return;
 	}
 
 	if (node->key.specified == AVTAB_XPERMS_ALLOWED) {
@@ -1027,7 +1004,8 @@ void services_compute_xperms_decision(struct extended_perms_decision *xpermd,
 					node->datum.u.xperms->perms.p[i];
 		}
 	} else {
-		BUG();
+		pr_warn_once("SELinux: unknown specified key (%u)\n",
+			     node->key.specified);
 	}
 }
 
@@ -1668,7 +1646,7 @@ out:
 	kfree(s);
 	kfree(t);
 	kfree(n);
-	if (!enforcing_enabled(state))
+	if (enforcing_enabled(state))
 		return 0;
 	return -EACCES;
 }

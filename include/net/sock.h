@@ -1857,8 +1857,10 @@ static inline void dst_negative_advice(struct sock *sk)
 
 	sk_rethink_txhash(sk);
 
-	if (dst && dst->ops->negative_advice)
-		dst->ops->negative_advice(sk, dst);
+	if (dst && dst->ops->negative_advice) {
+		dst = dst->ops->negative_advice(dst);
+		RCU_INIT_POINTER(sk->sk_dst_cache, dst);
+	}
 }
 
 static inline void

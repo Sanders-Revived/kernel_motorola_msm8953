@@ -188,7 +188,7 @@ static void kernfs_refresh_inode(struct kernfs_node *kn, struct inode *inode)
 int kernfs_iop_getattr(struct vfsmount *mnt, struct dentry *dentry,
 		   struct kstat *stat)
 {
-	struct inode *inode = d_inode(path->dentry);
+	struct inode *inode = d_inode(dentry);
 	struct kernfs_node *kn = inode->i_private;
 
 	mutex_lock(&kernfs_mutex);

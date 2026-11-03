@@ -534,9 +534,12 @@ unsigned long read_word_at_a_time(const void *addr)
  *
  *  gcc: https://gcc.gnu.org/onlinedocs/gcc/Statement-Attributes.html#Statement-Attributes
  */
-#if __has_attribute(__fallthrough__)
-# define fallthrough                    __attribute__((__fallthrough__))
-#else
+#if defined(__has_attribute)
+# if __has_attribute(__fallthrough__)
+#  define fallthrough                    __attribute__((__fallthrough__))
+# endif
+#endif
+#ifndef fallthrough
 # define fallthrough                    do {} while (0)  /* fallthrough */
 #endif
 

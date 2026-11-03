@@ -152,7 +152,7 @@ unsigned long __rounddown_pow_of_two(unsigned long n)
  * Use this where sparse expects a true constant expression, e.g. for array
  * indices.
  */
-#define const_ilog2(n)				\
+#define ilog2(n)				\
 (						\
 	__builtin_constant_p(n) ? (		\
 		(n) < 2 ? 0 :			\
