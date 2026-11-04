@@ -1697,6 +1697,7 @@ static inline int start_streaming(struct msm_vidc_inst *inst)
 	struct hfi_device *hdev;
 	bool slave_side_cp = inst->core->resources.slave_side_cp;
 	struct hal_buffer_size_minimum b;
+	struct hal_buffer_requirements *bufreq;
 	unsigned int buffer_size;
 	struct msm_vidc_format *fmt = NULL;
 
@@ -1712,6 +1713,12 @@ static inline int start_streaming(struct msm_vidc_inst *inst)
 		b.buffer_type = HAL_BUFFER_OUTPUT2;
 	} else {
 		b.buffer_type = HAL_BUFFER_OUTPUT;
+	}
+
+	bufreq = get_buff_req_buffer(inst, b.buffer_type);
+	if (IS_ENABLED(CONFIG_MSM_VIDC_GUARD_DECODER_OUTPUT) &&
+			bufreq && buffer_size < bufreq->buffer_size) {
+		buffer_size = bufreq->buffer_size;
 	}
 
 	b.buffer_size = buffer_size;
