@@ -3701,6 +3701,13 @@ static void populate_frame_data(struct vidc_frame_data *data,
 
 	} else if (type == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE) {
 		data->buffer_type = msm_comm_get_hal_output_buffer(inst);
+		{
+			struct hal_buffer_requirements *bufreq =
+				get_buff_req_buffer(inst, data->buffer_type);
+			if (IS_ENABLED(CONFIG_MSM_VIDC_GUARD_DECODER_OUTPUT) &&
+					bufreq && data->alloc_len < bufreq->buffer_size)
+				data->alloc_len = bufreq->buffer_size;
+		}
 	}
 
 	extra_idx = EXTRADATA_IDX(inst->fmts[port].num_planes);

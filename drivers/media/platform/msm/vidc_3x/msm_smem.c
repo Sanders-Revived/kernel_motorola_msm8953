@@ -15,6 +15,7 @@
 #include <linux/dma-buf.h>
 #include <linux/dma-direction.h>
 #include <linux/iommu.h>
+#include <linux/mm.h>
 #include <linux/msm_dma_iommu_mapping.h>
 #include <linux/msm_ion.h>
 #include <linux/slab.h>
@@ -41,7 +42,13 @@ static int get_device_address(struct smem_client *smem_client,
 	struct dma_buf *buf = NULL;
 	struct dma_buf_attachment *attach;
 	struct sg_table *table = NULL;
+	struct sg_table *map_table = NULL;
 	struct context_bank_info *cb = NULL;
+	struct page *guard_page = NULL;
+	struct scatterlist *src_sg, *dst_sg;
+	bool map_succeeded = false;
+	bool add_guard_page;
+	int i;
 
 	if (!iova || !buffer_size || !hndl || !smem_client || !mapping_info) {
 		dprintk(VIDC_ERR, "Invalid params: %pK, %pK, %pK, %pK\n",
@@ -56,6 +63,10 @@ static int get_device_address(struct smem_client *smem_client,
 	}
 
 	if (is_iommu_present(smem_client->res)) {
+		add_guard_page = IS_ENABLED(CONFIG_MSM_VIDC_GUARD_DECODER_OUTPUT) &&
+			smem_client->session_type == MSM_VIDC_DECODER &&
+			(buffer_type == HAL_BUFFER_OUTPUT ||
+			 buffer_type == HAL_BUFFER_OUTPUT2);
 		cb = msm_smem_get_context_bank(smem_client, flags & SMEM_SECURE,
 				buffer_type);
 		if (!cb) {
@@ -90,29 +101,69 @@ static int get_device_address(struct smem_client *smem_client,
 			goto mem_map_table_failed;
 		}
 
+		map_table = table;
+		if (add_guard_page) {
+			guard_page = alloc_page(GFP_KERNEL | __GFP_ZERO);
+			if (!guard_page) {
+				rc = -ENOMEM;
+				goto mem_map_table_failed;
+			}
+
+			map_table = kzalloc(sizeof(*map_table), GFP_KERNEL);
+			if (!map_table) {
+				rc = -ENOMEM;
+				goto mem_map_table_failed;
+			}
+
+			rc = sg_alloc_table(map_table, table->nents + 1,
+				GFP_KERNEL);
+			if (rc) {
+				kfree(map_table);
+				map_table = NULL;
+				goto mem_map_table_failed;
+			}
+
+			dst_sg = map_table->sgl;
+			for_each_sg(table->sgl, src_sg, table->nents, i) {
+				sg_set_page(dst_sg, sg_page(src_sg),
+					src_sg->length, src_sg->offset);
+				dst_sg = sg_next(dst_sg);
+			}
+			sg_set_page(dst_sg, guard_page, PAGE_SIZE, 0);
+		}
+
 		/* debug trace's need to be updated later */
 		trace_msm_smem_buffer_iommu_op_start("MAP", 0, 0,
 			align, *iova, *buffer_size);
 
-		/* Map a scatterlist into an SMMU */
-		rc = msm_dma_map_sg_lazy(cb->dev, table->sgl, table->nents,
-				DMA_BIDIRECTIONAL, buf);
-		if (rc != table->nents) {
+		/* Map a scatterlist into an SMMU. Guarded buffers must be
+		 * mapped eagerly; otherwise keep the original lazy path. */
+		if (add_guard_page)
+			rc = msm_dma_map_sg(cb->dev, map_table->sgl,
+					map_table->nents, DMA_BIDIRECTIONAL, buf);
+		else
+			rc = msm_dma_map_sg_lazy(cb->dev, table->sgl,
+					table->nents, DMA_BIDIRECTIONAL, buf);
+		if (rc != map_table->nents) {
 			dprintk(VIDC_ERR,
 				"Mapping failed with rc(%d), expected rc(%d)\n",
-				rc, table->nents);
+				rc, map_table->nents);
+			if (rc > 0)
+				msm_dma_unmap_sg(cb->dev, map_table->sgl,
+					map_table->nents, DMA_BIDIRECTIONAL, buf);
 			rc = -ENOMEM;
 			goto mem_map_sg_failed;
 		}
-		if (table->sgl) {
+		map_succeeded = true;
+		if (map_table->sgl) {
 			dprintk(VIDC_DBG,
 				"%s: CB : %s, DMA buf: %pK, device: %pK, attach: %pK, table: %pK, table sgl: %pK, rc: %d, dma_address: %pa\n",
 				__func__, cb->name, buf, cb->dev, attach,
-				table, table->sgl, rc,
-				&table->sgl->dma_address);
+				map_table, map_table->sgl, rc,
+				&map_table->sgl->dma_address);
 
-			*iova = table->sgl->dma_address;
-			*buffer_size = table->sgl->dma_length;
+			*iova = map_table->sgl->dma_address;
+			*buffer_size = map_table->sgl->dma_length;
 		} else {
 			dprintk(VIDC_ERR, "sgl is NULL\n");
 			rc = -ENOMEM;
@@ -122,8 +173,10 @@ static int get_device_address(struct smem_client *smem_client,
 		mapping_info->dev = cb->dev;
 		mapping_info->mapping = cb->mapping;
 		mapping_info->table = table;
+		mapping_info->map_table = map_table;
 		mapping_info->attach = attach;
 		mapping_info->buf = buf;
+		mapping_info->guard_page = guard_page;
 
 		trace_msm_smem_buffer_iommu_op_end("MAP", 0, 0,
 			align, *iova, *buffer_size);
@@ -139,8 +192,18 @@ static int get_device_address(struct smem_client *smem_client,
 	dprintk(VIDC_DBG, "mapped ion handle %pK to %pa\n", hndl, iova);
 	return 0;
 mem_map_sg_failed:
-	dma_buf_unmap_attachment(attach, table, DMA_BIDIRECTIONAL);
+	if (map_succeeded)
+		msm_dma_unmap_sg(cb->dev, map_table->sgl, map_table->nents,
+			DMA_BIDIRECTIONAL, buf);
 mem_map_table_failed:
+	if (map_table && map_table != table) {
+		sg_free_table(map_table);
+		kfree(map_table);
+	}
+	if (guard_page)
+		__free_page(guard_page);
+	if (!IS_ERR_OR_NULL(table))
+		dma_buf_unmap_attachment(attach, table, DMA_BIDIRECTIONAL);
 	dma_buf_detach(buf, attach);
 mem_buf_attach_failed:
 	dma_buf_put(buf);
@@ -162,6 +225,7 @@ static void put_device_address(struct smem_client *smem_client,
 	}
 
 	if (!mapping_info->dev || !mapping_info->table ||
+		!mapping_info->map_table ||
 		!mapping_info->buf || !mapping_info->attach) {
 		dprintk(VIDC_WARN, "Invalid params:\n");
 		return;
@@ -181,9 +245,15 @@ static void put_device_address(struct smem_client *smem_client,
 			mapping_info->attach);
 
 		trace_msm_smem_buffer_iommu_op_start("UNMAP", 0, 0, 0, 0, 0);
-		msm_dma_unmap_sg(mapping_info->dev, mapping_info->table->sgl,
-			mapping_info->table->nents, DMA_BIDIRECTIONAL,
+		msm_dma_unmap_sg(mapping_info->dev, mapping_info->map_table->sgl,
+			mapping_info->map_table->nents, DMA_BIDIRECTIONAL,
 			mapping_info->buf);
+		if (mapping_info->map_table != mapping_info->table) {
+			sg_free_table(mapping_info->map_table);
+			kfree(mapping_info->map_table);
+			if (mapping_info->guard_page)
+				__free_page(mapping_info->guard_page);
+		}
 		dma_buf_unmap_attachment(mapping_info->attach,
 			mapping_info->table, DMA_BIDIRECTIONAL);
 		dma_buf_detach(mapping_info->buf, mapping_info->attach);
