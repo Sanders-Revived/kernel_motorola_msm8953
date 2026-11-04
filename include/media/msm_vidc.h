@@ -56,8 +56,10 @@ struct dma_mapping_info {
 	struct device *dev;
 	struct dma_iommu_mapping *mapping;
 	struct sg_table *table;
+	struct sg_table *map_table;
 	struct dma_buf_attachment *attach;
 	struct dma_buf *buf;
+	struct page *guard_page;
 };
 
 struct msm_smem {

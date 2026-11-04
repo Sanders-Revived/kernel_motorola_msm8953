@@ -6,5 +6,16 @@ menuconfig MSM_VIDC_3X_V4L2
 		depends on ARCH_QCOM && VIDEO_V4L2
 		select VIDEOBUF2_CORE
 
+config MSM_VIDC_GUARD_DECODER_OUTPUT
+	bool "Guard Venus decoder output buffers"
+	depends on MSM_VIDC_3X_V4L2
+	default n
+	help
+	  Appends a zeroed guard page to the SMMU mapping of Venus decoder
+	  output buffers (HAL_BUFFER_OUTPUT / HAL_BUFFER_OUTPUT2), so that
+	  out-of-bounds accesses from the video hardware hit the guard page
+	  instead of adjacent kernel memory. Decoder output buffers are
+	  mapped eagerly (non-lazy) when this is enabled.
+
 source "drivers/media/platform/msm/vidc_3x/governors/Kconfig"
 source "drivers/media/platform/msm/vidc_3x/governors/Kconfig"
