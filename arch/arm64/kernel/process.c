@@ -513,7 +513,10 @@ long set_tagged_addr_ctrl(unsigned long arg)
 	if (arg & ~PR_TAGGED_ADDR_ENABLE)
 		return -EINVAL;
 
-	update_thread_flag(TIF_TAGGED_ADDR, arg & PR_TAGGED_ADDR_ENABLE);
+	if (arg & PR_TAGGED_ADDR_ENABLE)
+		set_thread_flag(TIF_TAGGED_ADDR);
+	else
+		clear_thread_flag(TIF_TAGGED_ADDR);
 
 	return 0;
 }
