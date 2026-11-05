@@ -888,7 +888,11 @@
 	};
 
 	clock_gcc_gfx: qcom,gcc-gfx@1800000 {
+#ifdef CONFIG_MSM8953_GPU_725MHZ
+		compatible = "qcom,gcc-gfx-sdm632";
+#else
 		compatible = "qcom,gcc-gfx-8953";
+#endif
 		reg = <0x1800000 0x80000>;
 		reg-names = "cc_base";
 		vdd_gfx-supply = <&gfx_vreg_corner>;
@@ -903,7 +907,13 @@
 			 < 400000000   4 >,  /* SVS Plus  */
 			 < 510000000   5 >,  /* NOM       */
 			 < 560000000   6 >,  /* Nom Plus  */
+#ifdef CONFIG_MSM8953_GPU_725MHZ
+			 < 650000000   7 >,  /* Turbo     */
+			 < 700000000   7 >,  /* Turbo */
+			 < 725000000   7 >;  /* Turbo */
+#else
 			 < 650000000   7 >;  /* Turbo     */
+#endif
 		#clock-cells = <1>;
 	};
 
