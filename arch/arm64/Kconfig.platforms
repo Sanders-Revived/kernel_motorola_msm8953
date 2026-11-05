@@ -168,6 +168,15 @@ config ARCH_MSM8953
 	  This enables support for the MSM8953 chipset. If you do not
 	  wish to build a kernel that runs on this chipset, say 'N' here.
 
+config MSM8953_GPU_725MHZ
+	bool "MSM8953: 725MHz Adreno 506 GPU operating point (SDM632 bin)"
+	depends on ARCH_MSM8953
+	default n
+	help
+	  Adds the 725MHz TURBO LD0 pwrlevel from Snapdragon 632 on top
+	  of the stock 650MHz msm8953 GPU table. Say 'N' to keep the
+	  stock maximum.
+
 config ARCH_MSM8937
 	bool "Enable Support for Qualcomm Technologies Inc. MSM8937"
 	depends on ARCH_QCOM
