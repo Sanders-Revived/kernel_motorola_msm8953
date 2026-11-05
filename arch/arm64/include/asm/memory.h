@@ -184,6 +184,13 @@ static inline unsigned long kaslr_offset(void)
  * of RAM in the mem_map as well.
  */
 #define PHYS_PFN_OFFSET	(PHYS_OFFSET >> PAGE_SHIFT)
+/*
+ * When dealing with data aborts, watchpoints, or instruction traps we may end
+ * up with a tagged userland pointer. Clear the tag to get a sane pointer to
+ * pass on to access_ok(), for instance.
+ */
+#define untagged_addr(addr) \
+	((__typeof__(addr))sign_extend64((__force u64)(addr), 55))
 
 /*
  * Note: Drivers should NOT use these.  They are the wrong
