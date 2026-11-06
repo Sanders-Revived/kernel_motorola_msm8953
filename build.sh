@@ -1,191 +1,285 @@
 #!/usr/bin/env bash
-#
-# Aurora Kernel build - sanders (Moto G5s Plus)
-# KSU OFF by default; use --ksu to build with BakaSU.
-#
 
-SECONDS=0
+set -Eeuo pipefail
 
-# ===== Device / Kernel =====
+ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+cd "$ROOT_DIR"
+
 DEVICE="sanders"
 DEVICE_NAME="Moto G5s Plus"
 DEFCONFIG="sanders_defconfig"
 
-# ===== BakaSU (default: OFF, enable with --ksu) =====
-KSU_REPO="https://github.com/Baka-SU/BakaSU"
-KSU_DIR="$(pwd)/KernelSU"
+OUT_DIR="$ROOT_DIR/out"
+BOOT_DIR="$OUT_DIR/arch/arm64/boot"
+DTB_DIR="$BOOT_DIR/dts/qcom"
+KERNEL_IMG="$BOOT_DIR/Image.gz"
+QCDT_IMG="$OUT_DIR/dt.img"
+AK3_DIR="$OUT_DIR/AnyKernel3"
+
+TC_REPO="${TC_REPO:-https://gitlab.com/ThankYouMario/android_prebuilts_clang-standalone}"
+TC_REF="${TC_REF:-18}"
+TC_DIR="${TC_DIR:-$ROOT_DIR/tc/clang-r522817}"
+
+DTBTOOL_REPO="${DTBTOOL_REPO:-https://github.com/LineageOS/android_system_tools_dtbtool.git}"
+DTBTOOL_REF="${DTBTOOL_REF:-lineage-18.1}"
+DTBTOOL_DIR="${DTBTOOL_DIR:-$ROOT_DIR/tools/dtbtool}"
+DTBTOOL_BIN="${DTBTOOL_BIN:-$OUT_DIR/host/dtbToolLineage}"
+
+AK3_REPO="${AK3_REPO:-https://github.com/Sanders-Revived/AnyKernel3.git}"
+AK3_BRANCH="${AK3_BRANCH:-sanders}"
+
+KSU_REPO="${KSU_REPO:-https://github.com/Baka-SU/BakaSU.git}"
+KSU_DIR="${KSU_DIR:-$ROOT_DIR/KernelSU}"
 WITH_KSU="${WITH_KSU:-0}"
 KSU_REF="${KSU_REF:-main}"
 
-# ===== Toolchain =====
-TC_DIR="$(pwd)/tc/clang-r522817"
-export PATH="$TC_DIR/bin:$PATH"
+HOSTCC="${HOSTCC:-cc}"
+JOBS="${JOBS:-$(command -v nproc >/dev/null && nproc --all || printf '1')}"
+CLEAN=0
+ACTION=build
 
-# ===== AnyKernel3 =====
-AK3_REPO="https://github.com/Sanders-Revived/AnyKernel3"
-AK3_BRANCH="sanders"
-AK3_DIR="$(pwd)/android/AnyKernel3"
-
-# ===== Output =====
-OUT_DIR="$(pwd)/out"
-BOOT_DIR="$OUT_DIR/arch/arm64/boot"
-KERNEL_IMG="$BOOT_DIR/Image.gz"
+die() {
+    printf '[!] %s\n' "$*" >&2
+    exit 1
+}
 
 usage() {
-    awk '/^SECONDS=0/{exit} NR>=3' "$0" | sed 's/^# \{0,1\}//'
+    cat <<EOF
+Usage: ./build.sh [options]
+
+  --ksu             Build with BakaSU
+  --no-ksu          Build without BakaSU (default)
+  --clean           Remove out/ before building
+  --jobs=N          Use N parallel jobs
+  --regen           Regenerate the minimal defconfig
+  --regen-full      Regenerate the full defconfig
+  -h, --help        Show this help
+
+Useful variables: TC_DIR, DTBTOOL_DIR, DTBTOOL_BIN, DTC_BIN,
+DTBTOOL_REF, KSU_REF and JOBS.
+EOF
 }
 
-# ===== Arguments =====
-CLEAN=0
-for arg in "$@"; do
-    case "$arg" in
-        --ksu)    WITH_KSU=1 ;;
-        --no-ksu) WITH_KSU=0 ;;
-        -c|--clean) CLEAN=1 ;;
-        -r|--regen)
-            mkdir -p out
-            make O=out ARCH=arm64 $DEFCONFIG savedefconfig
-            cp out/defconfig arch/arm64/configs/$DEFCONFIG
-            echo "[+] Defconfig regenerated"
-            exit 0
-            ;;
-        -rf|--regen-full)
-            mkdir -p out
-            make O=out ARCH=arm64 $DEFCONFIG
-            cp out/.config arch/arm64/configs/$DEFCONFIG
-            echo "[+] Full defconfig regenerated"
-            exit 0
-            ;;
-        -h|--help)
-            usage
-            exit 0
-            ;;
-        *) echo "[*] Ignoring legacy positional argument: $arg" ;;
-    esac
-done
+parse_args() {
+    local arg
 
-if [ "$CLEAN" -eq 1 ]; then
-    echo "[*] Cleaning output directory"
-    rm -rf out
-fi
+    for arg in "$@"; do
+        case "$arg" in
+            --ksu) WITH_KSU=1 ;;
+            --no-ksu) WITH_KSU=0 ;;
+            --clean|-c) CLEAN=1 ;;
+            --jobs=*) JOBS="${arg#*=}" ;;
+            --regen|-r) ACTION=regen ;;
+            --regen-full|-rf) ACTION=regen-full ;;
+            --help|-h) usage; exit 0 ;;
+            *) die "Opção desconhecida: $arg" ;;
+        esac
+    done
 
-# ===== BakaSU: driver fetch (KSU builds only) =====
+    [[ "$WITH_KSU" == 0 || "$WITH_KSU" == 1 ]] || die "WITH_KSU deve ser 0 ou 1"
+    [[ "$JOBS" =~ ^[1-9][0-9]*$ ]] || die "JOBS deve ser um número positivo"
+}
+
+setup_toolchain() {
+    if [[ ! -x "$TC_DIR/bin/clang" ]]; then
+        [[ ! -e "$TC_DIR" ]] || die "Toolchain inválida: $TC_DIR"
+        printf '[*] Clonando LLVM %s\n' "$TC_REF"
+        mkdir -p "$(dirname "$TC_DIR")"
+        git clone --depth=1 --single-branch --branch "$TC_REF" \
+            "$TC_REPO" "$TC_DIR"
+    fi
+
+    [[ -x "$TC_DIR/bin/clang" ]] || die "clang não encontrado em $TC_DIR/bin"
+    export PATH="$TC_DIR/bin:$PATH"
+}
+
 setup_ksu() {
-    echo "[*] BakaSU ref: $KSU_REF"
-    if [ ! -d "$KSU_DIR" ]; then
-        echo "[*] Cloning BakaSU..."
-        git clone "$KSU_REPO" "$KSU_DIR" || return 1
+    if [[ ! -d "$KSU_DIR/.git" ]]; then
+        [[ ! -e "$KSU_DIR" ]] || die "Diretório BakaSU inválido: $KSU_DIR"
+        printf '[*] Clonando BakaSU (%s)\n' "$KSU_REF"
+        git clone --depth=1 --single-branch "$KSU_REPO" "$KSU_DIR"
     fi
-    (
-        cd "$KSU_DIR" || exit 1
-        git fetch origin --tags 2>/dev/null || true
-        if ! git checkout "$KSU_REF" 2>/dev/null; then
-            echo "[!] Ref '$KSU_REF' not found, falling back to 'main'"
-            git checkout main || return 1
-        fi
-    ) || return 1
 
-    if [ ! -L "drivers/kernelsu" ]; then
-        echo "[*] Linking drivers/kernelsu..."
-        ln -sfn ../KernelSU/kernel drivers/kernelsu || return 1
-    fi
-    grep -q "kernelsu" drivers/Makefile \
-        || printf '\nobj-$(CONFIG_KSU) += kernelsu/\n' >> drivers/Makefile
-    grep -q 'source "drivers/kernelsu/Kconfig"' drivers/Kconfig \
-        || sed -i '/endmenu/i\source "drivers/kernelsu/Kconfig"' drivers/Kconfig
-    echo "[+] BakaSU driver ready"
+    git -C "$KSU_DIR" fetch --depth=1 origin --tags
+    git -C "$KSU_DIR" checkout --force "$KSU_REF" 2>/dev/null || {
+        printf '[!] Ref %s não encontrada; usando main\n' "$KSU_REF" >&2
+        git -C "$KSU_DIR" checkout --force main
+    }
+
+    ln -sfn ../KernelSU/kernel drivers/kernelsu
+    grep -Fq 'obj-$(CONFIG_KSU) += kernelsu/' drivers/Makefile ||
+        printf 'obj-$(CONFIG_KSU) += kernelsu/\n' >> drivers/Makefile
+    grep -Fq 'source "drivers/kernelsu/Kconfig"' drivers/Kconfig ||
+        sed -i '/endmenu/i\source "drivers/kernelsu/Kconfig"' drivers/Kconfig
 }
 
-# ===== Zip suffix =====
-if [ "$WITH_KSU" = "1" ]; then
-    KSU_TAG="$(echo "$KSU_REF" | tr '/ ' '__')"
-    VARIANT="BakaSU-${KSU_TAG}"
-else
-    VARIANT="NoKSU"
+setup_dtbtool() {
+    if [[ ! -f "$DTBTOOL_DIR/dtbtool.c" && ! -x "$DTBTOOL_BIN" ]]; then
+        [[ ! -e "$DTBTOOL_DIR" ]] || die "Diretório dtbtool inválido: $DTBTOOL_DIR"
+        printf '[*] Clonando dtbToolLineage (%s)\n' "$DTBTOOL_REF"
+        mkdir -p "$(dirname "$DTBTOOL_DIR")"
+        git clone --depth=1 --single-branch --branch "$DTBTOOL_REF" \
+            "$DTBTOOL_REPO" "$DTBTOOL_DIR"
+    fi
+
+    if [[ ! -x "$DTBTOOL_BIN" ]]; then
+        [[ -f "$DTBTOOL_DIR/dtbtool.c" ]] ||
+            die "dtbtool.c não encontrado em $DTBTOOL_DIR"
+        mkdir -p "$(dirname "$DTBTOOL_BIN")"
+        if [[ ! -e "$DTBTOOL_BIN" || "$DTBTOOL_DIR/dtbtool.c" -nt "$DTBTOOL_BIN" ]]; then
+            printf '[*] Compilando dtbToolLineage\n'
+            "$HOSTCC" -O2 -Wall -Wextra -o "$DTBTOOL_BIN" \
+                "$DTBTOOL_DIR/dtbtool.c"
+        fi
+    fi
+
+    [[ -x "$DTBTOOL_BIN" ]] || die "dtbToolLineage não foi gerado"
+}
+
+setup_dtc() {
+    DTC_BIN="${DTC_BIN:-$(command -v dtc || true)}"
+    [[ -x "$DTC_BIN" ]] || die "dtc não encontrado; instale device-tree-compiler ou defina DTC_BIN"
+    DTC_PATH="$(dirname "$DTC_BIN")/"
+}
+
+kernel_make() {
+    make O="$OUT_DIR" ARCH=arm64 "$@"
+}
+
+regen_defconfig() {
+    mkdir -p "$OUT_DIR"
+    if [[ "$ACTION" == regen ]]; then
+        kernel_make "$DEFCONFIG" savedefconfig
+        cp "$OUT_DIR/defconfig" "arch/arm64/configs/$DEFCONFIG"
+        printf '[+] Defconfig mínima regenerada\n'
+    else
+        kernel_make "$DEFCONFIG"
+        cp "$OUT_DIR/.config" "arch/arm64/configs/$DEFCONFIG"
+        printf '[+] Defconfig completa regenerada\n'
+    fi
+}
+
+configure_kernel() {
+    kernel_make "$DEFCONFIG"
+
+    if [[ "$WITH_KSU" == 1 ]]; then
+        ./scripts/config --file "$OUT_DIR/.config" \
+            --enable CONFIG_KSU \
+            --disable CONFIG_KSU_TRACEPOINT_HOOK \
+            --enable CONFIG_KSU_MANUAL_HOOK \
+            --disable CONFIG_KSU_MANUAL_HOOK_AUTO_SETUID_HOOK \
+            --disable CONFIG_KSU_MANUAL_HOOK_AUTO_INITRC_HOOK \
+            --disable CONFIG_KSU_MANUAL_HOOK_AUTO_INPUT_HOOK \
+            --enable CONFIG_KSU_MULTI_MANAGER_SUPPORT \
+            --enable CONFIG_KSU_DEBUG \
+            --enable CONFIG_SECURITY_WRITABLE_HOOKS \
+            --enable CONFIG_SECURITY_SELINUX_DISABLE
+    else
+        ./scripts/config --file "$OUT_DIR/.config" --disable CONFIG_KSU
+    fi
+
+    kernel_make olddefconfig
+}
+
+build_kernel() {
+    local make_args=(
+        O="$OUT_DIR"
+        ARCH=arm64
+        CC=clang
+        LD=ld.lld
+        AS=llvm-as
+        AR=llvm-ar
+        NM=llvm-nm
+        OBJCOPY=llvm-objcopy
+        OBJDUMP=llvm-objdump
+        STRIP=llvm-strip
+        CROSS_COMPILE=aarch64-linux-gnu-
+        CROSS_COMPILE_ARM32=arm-linux-gnueabi-
+        LLVM=1
+        LLVM_IAS=1
+    )
+
+    printf '[*] Compilando com %s tarefas\n' "$JOBS"
+    make -j"$JOBS" "${make_args[@]}" Image.gz dtbs
+    [[ -s "$KERNEL_IMG" ]] || die "Image.gz não foi gerada"
+}
+
+build_qcdt() {
+    local dtb
+    local dtbs=(
+        msm8953-sanders-p1.dtb
+        msm8953-sanders-p2.dtb
+        msm8953-sanders-p3.dtb
+        msm8953-sanders-p4.dtb
+    )
+    local stage="$OUT_DIR/sanders-dtbs"
+
+    for dtb in "${dtbs[@]}"; do
+        [[ -s "$DTB_DIR/$dtb" ]] || die "DTB ausente: $DTB_DIR/$dtb"
+    done
+
+    rm -rf "$stage"
+    mkdir -p "$stage"
+    cp "${dtbs[@]/#/$DTB_DIR/}" "$stage/"
+
+    printf '[*] Gerando QCDT\n'
+    "$DTBTOOL_BIN" --force-v2 --page-size 2048 \
+        --dtc-path "$DTC_PATH" \
+        --output-file "$QCDT_IMG" \
+        "$stage/"
+    [[ "$(head -c 4 "$QCDT_IMG")" == QCDT ]] || die "QCDT inválido"
+}
+
+package_kernel() {
+    local commit zip_name zip_path
+    commit="$(git rev-parse --short=8 HEAD 2>/dev/null || printf 'local')"
+    zip_name="Aurora-Kernel-${DEVICE}-$(date '+%Y%m%d-%H%M')-${commit}"
+    [[ "$WITH_KSU" == 1 ]] && zip_name+="-BakaSU-$(printf '%s' "$KSU_REF" | tr '/ ' '__')"
+    [[ "$WITH_KSU" == 0 ]] && zip_name+="-NoKSU"
+    zip_path="$ROOT_DIR/$zip_name.zip"
+
+    rm -rf "$AK3_DIR"
+    git clone --depth=1 --quiet --single-branch --branch "$AK3_BRANCH" \
+        "$AK3_REPO" "$AK3_DIR"
+    cp "$KERNEL_IMG" "$AK3_DIR/Image.gz"
+    cp "$QCDT_IMG" "$AK3_DIR/dt"
+
+    command -v zip >/dev/null || die "zip não encontrado"
+    (
+        cd "$AK3_DIR"
+        zip -qr9 "$zip_path" . -x './.git/*' './README.md' './*placeholder*'
+    )
+    rm -rf "$AK3_DIR"
+    printf '[+] Pacote: %s\n' "$zip_path"
+}
+
+cleanup() {
+    if [[ -d "$AK3_DIR" ]]; then
+        rm -rf "$AK3_DIR"
+    fi
+}
+
+trap cleanup EXIT
+parse_args "$@"
+
+if [[ "$CLEAN" == 1 ]]; then
+    rm -rf "$OUT_DIR"
 fi
 
-# ===== Zip =====
-ZIPNAME="Aurora-Kernel-${DEVICE}-$(date '+%Y%m%d-%H%M')"
-if test -z "$(git rev-parse --show-cdup 2>/dev/null)" &&
-   head=$(git rev-parse --verify HEAD 2>/dev/null); then
-    ZIPNAME="${ZIPNAME}-$(echo "$head" | cut -c1-8)"
-fi
-ZIPNAME="${ZIPNAME}-${VARIANT}.zip"
-
-# ===== Toolchain check =====
-if ! [ -d "$TC_DIR" ]; then
-    echo "[*] Cloning AOSP clang..."
-    git clone --depth=1 -b 18 \
-        https://gitlab.com/ThankYouMario/android_prebuilts_clang-standalone \
-        "$TC_DIR" || exit 1
+if [[ "$ACTION" != build ]]; then
+    regen_defconfig
+    exit 0
 fi
 
-# ===== Build =====
-mkdir -p out
-echo "[*] Building $DEFCONFIG for $DEVICE_NAME (WITH_KSU=$WITH_KSU)"
-
-if [ "$WITH_KSU" = "1" ]; then
-    setup_ksu || exit 1
-fi
-
-make O=out ARCH=arm64 $DEFCONFIG
-
-# Toggle KSU in the generated .config (the defconfig carries no CONFIG_KSU
-# on purpose, so the choice is made here at build time).
-if [ "$WITH_KSU" = "1" ]; then
-    ./scripts/config --file out/.config \
-        --enable CONFIG_KSU \
-        --disable CONFIG_KSU_TRACEPOINT_HOOK \
-        --enable CONFIG_KSU_MANUAL_HOOK \
-        --disable CONFIG_KSU_MANUAL_HOOK_AUTO_SETUID_HOOK \
-        --disable CONFIG_KSU_MANUAL_HOOK_AUTO_INITRC_HOOK \
-        --disable CONFIG_KSU_MANUAL_HOOK_AUTO_INPUT_HOOK \
-        --enable CONFIG_KSU_MULTI_MANAGER_SUPPORT \
-        --enable CONFIG_KSU_DEBUG \
-        --enable CONFIG_SECURITY_WRITABLE_HOOKS \
-        --enable CONFIG_SECURITY_SELINUX_DISABLE
-else
-    ./scripts/config --file out/.config \
-        --disable CONFIG_KSU
-fi
-make O=out ARCH=arm64 olddefconfig
-
-echo "[*] Effective KSU config:"
-grep -E "^CONFIG_KSU" out/.config || echo "    (CONFIG_KSU absent = disabled)"
-
-echo "[*] Starting compilation..."
-make -j$(nproc --all) O=out ARCH=arm64 \
-    CC=clang LD=ld.lld AS=llvm-as AR=llvm-ar NM=llvm-nm \
-    OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip \
-    CROSS_COMPILE=aarch64-linux-gnu- \
-    CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
-    LLVM=1 LLVM_IAS=1 Image.gz
-
-# ===== Check compilation =====
-if ! [ -f "$KERNEL_IMG" ]; then
-    echo "[!] Compilation failed – Image.gz not found"
-    exit 1
-fi
-
-echo "[+] Kernel compiled successfully (VARIANT=$VARIANT)"
-
-# ===== Prepare AnyKernel3 =====
-rm -rf AnyKernel3
-echo "[*] Cloning AnyKernel3 for $DEVICE"
-git clone -q -b "$AK3_BRANCH" "$AK3_REPO" AnyKernel3 || exit 1
-
-# Copy the kernel image to AnyKernel3
-cp "$KERNEL_IMG" AnyKernel3
-
-# Remove boot output folder (Supra style)
-rm -rf out/arch/arm64/boot
-
-# ===== Zip =====
-cd AnyKernel3 || exit 1
-zip -r9 "../$ZIPNAME" * -x .git README.md "*placeholder*"
-cd ..
-rm -rf AnyKernel3
-
-echo
-echo "[✓] Done in $((SECONDS / 60))m $((SECONDS % 60))s"
-echo "[✓] Zip: $ZIPNAME"
+SECONDS=0
+printf '[*] Build %s (%s, KSU=%s)\n' "$DEVICE_NAME" "$DEFCONFIG" "$WITH_KSU"
+setup_toolchain
+[[ "$WITH_KSU" == 0 ]] || setup_ksu
+mkdir -p "$OUT_DIR"
+setup_dtbtool
+setup_dtc
+configure_kernel
+build_kernel
+build_qcdt
+package_kernel
+printf '[+] Concluído em %dm %ds\n' "$((SECONDS / 60))" "$((SECONDS % 60))"
