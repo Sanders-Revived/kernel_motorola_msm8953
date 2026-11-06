@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -Eeuo pipefail
+set -euo pipefail
 
 ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 cd "$ROOT_DIR"
@@ -28,13 +28,14 @@ DTBTOOL_BIN="${DTBTOOL_BIN:-$OUT_DIR/host/dtbToolLineage}"
 AK3_REPO="${AK3_REPO:-https://github.com/Sanders-Revived/AnyKernel3.git}"
 AK3_BRANCH="${AK3_BRANCH:-sanders}"
 
-KSU_REPO="${KSU_REPO:-https://github.com/Baka-SU/BakaSU.git}"
-KSU_DIR="${KSU_DIR:-$ROOT_DIR/KernelSU}"
+KSU_SETUP_URL="${KSU_SETUP_URL:-https://raw.githubusercontent.com/Baka-SU/BakaSU/main/kernel/setup.sh}"
+KSU_DIR="$ROOT_DIR/KernelSU"
 WITH_KSU="${WITH_KSU:-0}"
 KSU_REF="${KSU_REF:-main}"
 
 HOSTCC="${HOSTCC:-cc}"
 JOBS="${JOBS:-$(command -v nproc >/dev/null && nproc --all || printf '1')}"
+KSU_BUILD_ARGS=()
 CLEAN=0
 ACTION=build
 
@@ -45,18 +46,18 @@ die() {
 
 usage() {
     cat <<EOF
-Usage: ./build.sh [options]
+Uso: ./build.sh [opções]
 
-  --ksu             Build with BakaSU
-  --no-ksu          Build without BakaSU (default)
-  --clean           Remove out/ before building
-  --jobs=N          Use N parallel jobs
-  --regen           Regenerate the minimal defconfig
-  --regen-full      Regenerate the full defconfig
-  -h, --help        Show this help
+  --ksu             Compila com BakaSU
+  --no-ksu          Compila sem BakaSU (padrão)
+  --clean           Remove out/ antes da compilação
+  --jobs=N          Usa N tarefas paralelas
+  --regen           Regenera a defconfig mínima
+  --regen-full      Regenera a defconfig completa
+  -h, --help        Mostra esta ajuda
 
-Useful variables: TC_DIR, DTBTOOL_DIR, DTBTOOL_BIN, DTC_BIN,
-DTBTOOL_REF, KSU_REF and JOBS.
+Variáveis úteis: TC_DIR, DTBTOOL_DIR, DTBTOOL_BIN, DTC_BIN,
+DTBTOOL_REF, KSU_REF, KSU_SETUP_URL e JOBS.
 EOF
 }
 
@@ -94,23 +95,20 @@ setup_toolchain() {
 }
 
 setup_ksu() {
-    if [[ ! -d "$KSU_DIR/.git" ]]; then
-        [[ ! -e "$KSU_DIR" ]] || die "Diretório BakaSU inválido: $KSU_DIR"
-        printf '[*] Clonando BakaSU (%s)\n' "$KSU_REF"
-        git clone --depth=1 --single-branch "$KSU_REPO" "$KSU_DIR"
+    command -v curl >/dev/null || die "curl não encontrado"
+    printf '[*] Configurando BakaSU (%s)\n' "$KSU_REF"
+    curl -fsSL "$KSU_SETUP_URL" | bash -s -- "$KSU_REF"
+    [[ -d "$KSU_DIR/kernel" ]] || die "O setup do BakaSU não criou $KSU_DIR/kernel"
+}
+
+setup_ksu_compat() {
+    KSU_BUILD_ARGS=()
+    if [[ "$WITH_KSU" == 1 ]] &&
+       grep -Fq 'setprocattr, const char *name, void *value, size_t size' \
+           include/linux/lsm_hook_defs.h; then
+        KSU_BUILD_ARGS=(KCFLAGS=-DKSU_COMPAT_SETPROCATTR_USE_NEW_PROTOTYPE)
+        printf '[*] Ativando compatibilidade BakaSU para setprocattr\n'
     fi
-
-    git -C "$KSU_DIR" fetch --depth=1 origin --tags
-    git -C "$KSU_DIR" checkout --force "$KSU_REF" 2>/dev/null || {
-        printf '[!] Ref %s não encontrada; usando main\n' "$KSU_REF" >&2
-        git -C "$KSU_DIR" checkout --force main
-    }
-
-    ln -sfn ../KernelSU/kernel drivers/kernelsu
-    grep -Fq 'obj-$(CONFIG_KSU) += kernelsu/' drivers/Makefile ||
-        printf 'obj-$(CONFIG_KSU) += kernelsu/\n' >> drivers/Makefile
-    grep -Fq 'source "drivers/kernelsu/Kconfig"' drivers/Kconfig ||
-        sed -i '/endmenu/i\source "drivers/kernelsu/Kconfig"' drivers/Kconfig
 }
 
 setup_dtbtool() {
@@ -200,7 +198,7 @@ build_kernel() {
     )
 
     printf '[*] Compilando com %s tarefas\n' "$JOBS"
-    make -j"$JOBS" "${make_args[@]}" Image.gz dtbs
+    make -j"$JOBS" "${make_args[@]}" "${KSU_BUILD_ARGS[@]}" Image.gz dtbs
     [[ -s "$KERNEL_IMG" ]] || die "Image.gz não foi gerada"
 }
 
@@ -254,6 +252,12 @@ package_kernel() {
 }
 
 cleanup() {
+    if [[ "$WITH_KSU" == 1 ]]; then
+        rm -f drivers/kernelsu
+        sed -i '/obj-$(CONFIG_KSU) += kernelsu\//d' drivers/Makefile
+        sed -i '${/^$/d;}' drivers/Makefile
+        sed -i '/source "drivers\/kernelsu\/Kconfig"/d' drivers/Kconfig
+    fi
     if [[ -d "$AK3_DIR" ]]; then
         rm -rf "$AK3_DIR"
     fi
@@ -275,6 +279,7 @@ SECONDS=0
 printf '[*] Build %s (%s, KSU=%s)\n' "$DEVICE_NAME" "$DEFCONFIG" "$WITH_KSU"
 setup_toolchain
 [[ "$WITH_KSU" == 0 ]] || setup_ksu
+setup_ksu_compat
 mkdir -p "$OUT_DIR"
 setup_dtbtool
 setup_dtc
