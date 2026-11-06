@@ -28,14 +28,13 @@ DTBTOOL_BIN="${DTBTOOL_BIN:-$OUT_DIR/host/dtbToolLineage}"
 AK3_REPO="${AK3_REPO:-https://github.com/Sanders-Revived/AnyKernel3.git}"
 AK3_BRANCH="${AK3_BRANCH:-sanders}"
 
-KSU_SETUP_URL="${KSU_SETUP_URL:-https://raw.githubusercontent.com/Baka-SU/BakaSU/main/kernel/setup.sh}"
+KSU_SETUP_URL="${KSU_SETUP_URL:-https://raw.githubusercontent.com/backslashxx/KernelSU/master/kernel/setup.sh}"
 KSU_DIR="$ROOT_DIR/KernelSU"
 WITH_KSU="${WITH_KSU:-0}"
-KSU_REF="${KSU_REF:-main}"
+KSU_REF="${KSU_REF:-}"
 
 HOSTCC="${HOSTCC:-cc}"
 JOBS="${JOBS:-$(command -v nproc >/dev/null && nproc --all || printf '1')}"
-KSU_BUILD_ARGS=()
 CLEAN=0
 ACTION=build
 
@@ -48,8 +47,8 @@ usage() {
     cat <<EOF
 Uso: ./build.sh [opções]
 
-  --ksu             Compila com BakaSU
-  --no-ksu          Compila sem BakaSU (padrão)
+  --ksu             Compila com KernelSU
+  --no-ksu          Compila sem KernelSU (padrão)
   --clean           Remove out/ antes da compilação
   --jobs=N          Usa N tarefas paralelas
   --regen           Regenera a defconfig mínima
@@ -95,20 +94,25 @@ setup_toolchain() {
 }
 
 setup_ksu() {
-    command -v curl >/dev/null || die "curl não encontrado"
-    printf '[*] Configurando BakaSU (%s)\n' "$KSU_REF"
-    curl -fsSL "$KSU_SETUP_URL" | bash -s -- "$KSU_REF"
-    [[ -d "$KSU_DIR/kernel" ]] || die "O setup do BakaSU não criou $KSU_DIR/kernel"
-}
+    local remote ref
 
-setup_ksu_compat() {
-    KSU_BUILD_ARGS=()
-    if [[ "$WITH_KSU" == 1 ]] &&
-       grep -Fq 'setprocattr, const char *name, void *value, size_t size' \
-           include/linux/lsm_hook_defs.h; then
-        KSU_BUILD_ARGS=(KCFLAGS=-DKSU_COMPAT_SETPROCATTR_USE_NEW_PROTOTYPE)
-        printf '[*] Ativando compatibilidade BakaSU para setprocattr\n'
+    command -v curl >/dev/null || die "curl não encontrado"
+    if [[ -d "$KSU_DIR/.git" ]]; then
+        remote="$(git -C "$KSU_DIR" remote get-url origin 2>/dev/null || true)"
+        if [[ "$remote" != *"github.com/backslashxx/KernelSU"* ]]; then
+            printf '[*] Removendo checkout antigo do KernelSU\n'
+            rm -rf "$KSU_DIR"
+        fi
     fi
+
+    ref="${KSU_REF:-latest-tag}"
+    printf '[*] Configurando KernelSU (%s)\n' "$ref"
+    if [[ -n "$KSU_REF" ]]; then
+        curl -fsSL "$KSU_SETUP_URL" | bash -s -- "$KSU_REF"
+    else
+        curl -fsSL "$KSU_SETUP_URL" | bash
+    fi
+    [[ -d "$KSU_DIR/kernel" ]] || die "O setup do KernelSU não criou $KSU_DIR/kernel"
 }
 
 setup_dtbtool() {
@@ -163,20 +167,27 @@ configure_kernel() {
     if [[ "$WITH_KSU" == 1 ]]; then
         ./scripts/config --file "$OUT_DIR/.config" \
             --enable CONFIG_KSU \
-            --disable CONFIG_KSU_TRACEPOINT_HOOK \
-            --enable CONFIG_KSU_MANUAL_HOOK \
-            --disable CONFIG_KSU_MANUAL_HOOK_AUTO_SETUID_HOOK \
-            --disable CONFIG_KSU_MANUAL_HOOK_AUTO_INITRC_HOOK \
-            --disable CONFIG_KSU_MANUAL_HOOK_AUTO_INPUT_HOOK \
-            --enable CONFIG_KSU_MULTI_MANAGER_SUPPORT \
-            --enable CONFIG_KSU_DEBUG \
-            --enable CONFIG_SECURITY_WRITABLE_HOOKS \
-            --enable CONFIG_SECURITY_SELINUX_DISABLE
+            --disable CONFIG_KSU_HACK_ARM64_BRANCH_LINK \
+            --enable CONFIG_KSU_TAMPER_SYSCALL_TABLE \
+            --disable CONFIG_KSU_DEBUG \
+            --disable CONFIG_SECURITY_WRITABLE_HOOKS \
+            --disable CONFIG_SECURITY_SELINUX_DISABLE
     else
         ./scripts/config --file "$OUT_DIR/.config" --disable CONFIG_KSU
     fi
 
     kernel_make olddefconfig
+}
+
+prepare_arch_headers() {
+    local makefile="$ROOT_DIR/scripts/Makefile.asm-generic"
+    local generated="$OUT_DIR/arch/arm64/include/generated"
+
+    mkdir -p "$generated/asm" "$generated/uapi/asm"
+    make -f "$makefile" srctree="$ROOT_DIR" SRCARCH=arm64 \
+        src=asm obj="$generated/asm"
+    make -f "$makefile" srctree="$ROOT_DIR" SRCARCH=arm64 \
+        src=uapi/asm obj="$generated/uapi/asm"
 }
 
 build_kernel() {
@@ -198,7 +209,7 @@ build_kernel() {
     )
 
     printf '[*] Compilando com %s tarefas\n' "$JOBS"
-    make -j"$JOBS" "${make_args[@]}" "${KSU_BUILD_ARGS[@]}" Image.gz dtbs
+    make -j"$JOBS" "${make_args[@]}" Image.gz dtbs
     [[ -s "$KERNEL_IMG" ]] || die "Image.gz não foi gerada"
 }
 
@@ -232,7 +243,7 @@ package_kernel() {
     local commit zip_name zip_path
     commit="$(git rev-parse --short=8 HEAD 2>/dev/null || printf 'local')"
     zip_name="Aurora-Kernel-${DEVICE}-$(date '+%Y%m%d-%H%M')-${commit}"
-    [[ "$WITH_KSU" == 1 ]] && zip_name+="-BakaSU-$(printf '%s' "$KSU_REF" | tr '/ ' '__')"
+    [[ "$WITH_KSU" == 1 ]] && zip_name+="-KernelSU-$(printf '%s' "${KSU_REF:-latest}" | tr '/ ' '__')"
     [[ "$WITH_KSU" == 0 ]] && zip_name+="-NoKSU"
     zip_path="$ROOT_DIR/$zip_name.zip"
 
@@ -279,11 +290,11 @@ SECONDS=0
 printf '[*] Build %s (%s, KSU=%s)\n' "$DEVICE_NAME" "$DEFCONFIG" "$WITH_KSU"
 setup_toolchain
 [[ "$WITH_KSU" == 0 ]] || setup_ksu
-setup_ksu_compat
 mkdir -p "$OUT_DIR"
 setup_dtbtool
 setup_dtc
 configure_kernel
+prepare_arch_headers
 build_kernel
 build_qcdt
 package_kernel
