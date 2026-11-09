@@ -11,20 +11,37 @@ on:
         options:
           - 4.9.337
           - SDM632-WIP
-      with_ksu:
-        description: 'Include ReSukiSU (root)?'
-        required: true
-        default: false
-        type: boolean
       ksu_ref:
-        description: 'ReSukiSU version (branch, tag or commit). E.g. main'
+        description: 'BakaSU version (branch, tag or commit). E.g. main'
         required: false
         default: 'main'
         type: string
 
 jobs:
   build:
+    name: ${{ matrix.variant }}
     runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - variant: oc-ksu
+            label: OC + KSU
+            with_ksu: '1'
+            with_oc: '1'
+          - variant: oc-vanilla
+            label: OC + vanilla
+            with_ksu: '0'
+            with_oc: '1'
+          - variant: stock-ksu
+            label: Stock GPU + KSU
+            with_ksu: '1'
+            with_oc: '0'
+          - variant: vanilla
+            label: Stock GPU + vanilla
+            with_ksu: '0'
+            with_oc: '0'
 
     env:
       DEVICE: sanders
@@ -52,10 +69,12 @@ jobs:
 
       - name: Run build script
         env:
-          WITH_KSU: ${{ inputs.with_ksu && '1' || '0' }}
+          WITH_KSU: ${{ matrix.with_ksu }}
+          WITH_OC: ${{ matrix.with_oc }}
           KSU_REF: ${{ inputs.ksu_ref }}
         run: |
-          echo "Branch: ${{ inputs.branch }} | WITH_KSU=$WITH_KSU | KSU_REF=$KSU_REF"
+          echo "Variant: ${{ matrix.label }}"
+          echo "Branch: ${{ inputs.branch }} | WITH_KSU=$WITH_KSU | WITH_OC=$WITH_OC | KSU_REF=$KSU_REF"
           ./build.sh
 
       - name: Set Build End Time
@@ -68,6 +87,13 @@ jobs:
           seconds=$((duration % 60))
           echo "BUILD_DURATION=${minutes}m ${seconds}s" >> $GITHUB_ENV
 
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Aurora-Kernel-${{ matrix.variant }}
+          path: Aurora-Kernel-sanders*.zip
+          if-no-files-found: error
+
       - name: Upload to Telegram
         uses: appleboy/telegram-action@master
         with:
@@ -78,5 +104,7 @@ jobs:
             🌌 New Aurora Kernel build available!
             📱 Device: Moto G5s Plus (sanders)
             🌿 Branch: ${{ inputs.branch }}
-            🛡 KSU: ${{ inputs.with_ksu && 'with ReSukiSU' || 'without KSU' }} (${{ inputs.ksu_ref }})
+            📦 Variant: ${{ matrix.label }}
+            🛡 KSU: ${{ matrix.with_ksu == '1' && 'with KSU' || 'without KSU' }} (${{ inputs.ksu_ref }})
+            ⚡ GPU: ${{ matrix.with_oc == '1' && '725MHz OC' || 'stock' }}
             ⏱ Build time: ${{ env.BUILD_DURATION }}
