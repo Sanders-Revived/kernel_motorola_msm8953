@@ -127,6 +127,7 @@ Android.bp
 # Object directory
 out/
 tc/
+/tools/dtbtool/
 
 KernelSU/
 drivers/kernelsu
