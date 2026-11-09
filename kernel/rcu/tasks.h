@@ -28,8 +28,10 @@ typedef void (*postgp_func_t)(struct rcu_tasks *rtp);
 #define RTGS_INVOKE_CBS		10
 #define RTGS_WAIT_CBS		11
 
+#ifdef CONFIG_TASKS_TRACE_RCU
 static atomic_t trc_n_readers_need_end;		// Number of waited-for readers.
 static DECLARE_WAIT_QUEUE_HEAD(trc_wait);	// List of holdout tasks.
+#endif
 
 /*
  * Simple variant of RCU whose quiescent states are voluntary context
@@ -409,6 +411,8 @@ static void __init rcu_tasks_bootup_oddness(void)
 
 
 
+#ifdef CONFIG_TASKS_TRACE_RCU
+
 // Enqueue a callback for the specified flavor of Tasks RCU.
 static void call_rcu_tasks_generic(struct rcu_head *rhp, rcu_callback_t func,
 				   struct rcu_tasks *rtp)
@@ -554,3 +558,5 @@ void rcu_read_unlock_trace_special(struct task_struct *t)
 		wake_up(&trc_wait);
 }
 EXPORT_SYMBOL_GPL(rcu_read_unlock_trace_special);
+
+#endif /* CONFIG_TASKS_TRACE_RCU */
