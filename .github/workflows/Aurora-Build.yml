@@ -12,9 +12,9 @@ on:
           - 4.9.337
           - SDM632-WIP
       ksu_ref:
-        description: 'BakaSU version (branch, tag or commit). E.g. main'
+        description: 'Backslash KernelSU version (branch, tag or commit). E.g. master'
         required: false
-        default: 'main'
+        default: 'master'
         type: string
 
 jobs:

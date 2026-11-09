@@ -28,10 +28,10 @@ DTBTOOL_BIN="${DTBTOOL_BIN:-$OUT_DIR/host/dtbToolLineage}"
 AK3_REPO="${AK3_REPO:-https://github.com/Sanders-Revived/AnyKernel3.git}"
 AK3_BRANCH="${AK3_BRANCH:-sanders}"
 
-KSU_SETUP_URL="${KSU_SETUP_URL:-https://raw.githubusercontent.com/Baka-SU/BakaSU/main/kernel/setup.sh}"
+KSU_SETUP_URL="${KSU_SETUP_URL:-https://raw.githubusercontent.com/backslashxx/KernelSU/master/kernel/setup.sh}"
 KSU_DIR="$ROOT_DIR/KernelSU"
 WITH_KSU="${WITH_KSU:-0}"
-KSU_REF="${KSU_REF:-main}"
+KSU_REF="${KSU_REF:-master}"
 WITH_OC="${WITH_OC:-0}"
 
 HOSTCC="${HOSTCC:-cc}"
@@ -48,8 +48,8 @@ usage() {
     cat <<EOF
 Usage: ./build.sh [options]
 
-  --ksu             Build with BakaSU
-  --no-ksu          Build without BakaSU (default)
+  --ksu             Build with Backslash KernelSU
+  --no-ksu          Build without KernelSU (default)
   --oc              Build with the 725MHz GPU operating point
   --no-oc           Build with the stock GPU frequency table (default)
   --clean           Remove out/ before building
@@ -101,9 +101,9 @@ setup_toolchain() {
 
 setup_ksu() {
     command -v curl >/dev/null || die "curl not found"
-    printf '[*] Setting up BakaSU (%s)\n' "$KSU_REF"
+    printf '[*] Setting up Backslash KernelSU (%s)\n' "$KSU_REF"
     curl -fsSL "$KSU_SETUP_URL" | bash -s -- "$KSU_REF"
-    [[ -d "$KSU_DIR/kernel" ]] || die "BakaSU setup did not create $KSU_DIR/kernel"
+    [[ -d "$KSU_DIR/kernel" ]] || die "KernelSU setup did not create $KSU_DIR/kernel"
 }
 
 setup_dtbtool() {
@@ -158,8 +158,10 @@ configure_kernel() {
     if [[ "$WITH_KSU" == 1 ]]; then
         ./scripts/config --file "$OUT_DIR/.config" \
             --enable CONFIG_KSU \
-            --disable CONFIG_KSU_TRACEPOINT_HOOK \
-            --enable CONFIG_KSU_MANUAL_HOOK
+            --enable CONFIG_KSU_TAMPER_SYSCALL_TABLE \
+            --enable CONFIG_KSU_LSM_SECURITY_HOOKS \
+            --disable CONFIG_KSU_HACK_ARM64_BRANCH_LINK \
+            --disable CONFIG_KSU_KPROBES_KSUD
     else
         ./scripts/config --file "$OUT_DIR/.config" --disable CONFIG_KSU
     fi
@@ -226,7 +228,7 @@ package_kernel() {
     local commit zip_name zip_path
     commit="$(git rev-parse --short=8 HEAD 2>/dev/null || printf 'local')"
     zip_name="Aurora-Kernel-${DEVICE}-$(date '+%Y%m%d-%H%M')-${commit}"
-    [[ "$WITH_KSU" == 1 ]] && zip_name+="-BakaSU-$(printf '%s' "$KSU_REF" | tr '/ ' '__')"
+    [[ "$WITH_KSU" == 1 ]] && zip_name+="-KernelSU-Backslash-$(printf '%s' "$KSU_REF" | tr '/ ' '__')"
     [[ "$WITH_KSU" == 0 ]] && zip_name+="-NoKSU"
     [[ "$WITH_OC" == 1 ]] && zip_name+="-OC"
     [[ "$WITH_OC" == 0 ]] && zip_name+="-NoOC"
