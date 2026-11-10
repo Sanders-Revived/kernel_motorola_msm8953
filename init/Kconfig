@@ -1958,6 +1958,17 @@ config MODVERSIONS
 	  make them incompatible with the kernel you are running.  If
 	  unsure, say N.
 
+config MODVERSIONS_IGNORE_MISMATCH
+	bool "Ignore module symbol version (CRC) mismatches"
+	depends on MODVERSIONS
+	default y
+	help
+	  When loading modules with mismatched symbol CRCs (such as out-of-tree
+	  or prebuilt vendor drivers), log a warning but allow the module to
+	  load successfully instead of failing with -ENOEXEC.
+
+	  If unsure, say N.
+
 config MODULE_SRCVERSION_ALL
 	bool "Source checksum for all modules"
 	help
