@@ -6,11 +6,11 @@ on:
       branch:
         description: 'Kernel branch to build'
         required: true
-        default: '4.9.337'
+        default: '4.9.337-ebpf'
         type: choice
         options:
+          - 4.9.337-ebpf
           - 4.9.337
-          - SDM632-WIP
       ksu_ref:
         description: 'Backslash KernelSU version (branch, tag or commit). E.g. master'
         required: false

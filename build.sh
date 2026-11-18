@@ -11,19 +11,12 @@ DEFCONFIG="sanders_defconfig"
 
 OUT_DIR="$ROOT_DIR/out"
 BOOT_DIR="$OUT_DIR/arch/arm64/boot"
-DTB_DIR="$BOOT_DIR/dts/qcom"
 KERNEL_IMG="$BOOT_DIR/Image.gz"
-QCDT_IMG="$OUT_DIR/dt.img"
 AK3_DIR="$OUT_DIR/AnyKernel3"
 
 TC_REPO="${TC_REPO:-https://gitlab.com/crdroidandroid/android_prebuilts_clang_host_linux-x86_clang-r596125}"
 TC_REF="${TC_REF:-16.0}"
 TC_DIR="${TC_DIR:-$ROOT_DIR/tc/clang-r596125}"
-
-DTBTOOL_REPO="${DTBTOOL_REPO:-https://github.com/LineageOS/android_system_tools_dtbtool.git}"
-DTBTOOL_REF="${DTBTOOL_REF:-lineage-18.1}"
-DTBTOOL_DIR="${DTBTOOL_DIR:-$ROOT_DIR/tools/dtbtool}"
-DTBTOOL_BIN="${DTBTOOL_BIN:-$OUT_DIR/host/dtbToolLineage}"
 
 AK3_REPO="${AK3_REPO:-https://github.com/Sanders-Revived/AnyKernel3.git}"
 AK3_BRANCH="${AK3_BRANCH:-sanders}"
@@ -32,9 +25,8 @@ KSU_SETUP_URL="${KSU_SETUP_URL:-https://raw.githubusercontent.com/backslashxx/Ke
 KSU_DIR="$ROOT_DIR/KernelSU"
 WITH_KSU="${WITH_KSU:-0}"
 KSU_REF="${KSU_REF:-master}"
-WITH_OC="${WITH_OC:-0}"
+WITH_OC="${WITH_OC:-1}"
 
-HOSTCC="${HOSTCC:-cc}"
 JOBS="${JOBS:-$(command -v nproc >/dev/null && nproc --all || printf '1')}"
 CLEAN=0
 ACTION=build
@@ -50,16 +42,15 @@ Usage: ./build.sh [options]
 
   --ksu             Build with Backslash KernelSU
   --no-ksu          Build without KernelSU (default)
-  --oc              Build with the 725MHz GPU operating point
-  --no-oc           Build with the stock GPU frequency table (default)
+  --oc              Build with the 725MHz GPU operating point (default)
+  --no-oc           Build with the stock GPU frequency table
   --clean           Remove out/ before building
   --jobs=N          Use N parallel jobs
   --regen           Regenerate the minimal defconfig
   --regen-full      Regenerate the full defconfig
   -h, --help        Show this help
 
-Useful variables: TC_DIR, DTBTOOL_DIR, DTBTOOL_BIN, DTC_BIN,
-DTBTOOL_REF, KSU_REF, KSU_SETUP_URL and JOBS.
+Useful variables: TC_DIR, KSU_REF, KSU_SETUP_URL and JOBS.
 EOF
 }
 
@@ -104,35 +95,6 @@ setup_ksu() {
     printf '[*] Setting up Backslash KernelSU (%s)\n' "$KSU_REF"
     curl -fsSL "$KSU_SETUP_URL" | bash -s -- "$KSU_REF"
     [[ -d "$KSU_DIR/kernel" ]] || die "KernelSU setup did not create $KSU_DIR/kernel"
-}
-
-setup_dtbtool() {
-    if [[ ! -f "$DTBTOOL_DIR/dtbtool.c" && ! -x "$DTBTOOL_BIN" ]]; then
-        [[ ! -e "$DTBTOOL_DIR" ]] || die "Invalid dtbtool directory: $DTBTOOL_DIR"
-        printf '[*] Cloning dtbToolLineage (%s)\n' "$DTBTOOL_REF"
-        mkdir -p "$(dirname "$DTBTOOL_DIR")"
-        git clone --depth=1 --single-branch --branch "$DTBTOOL_REF" \
-            "$DTBTOOL_REPO" "$DTBTOOL_DIR"
-    fi
-
-    if [[ ! -x "$DTBTOOL_BIN" ]]; then
-        [[ -f "$DTBTOOL_DIR/dtbtool.c" ]] ||
-            die "dtbtool.c not found in $DTBTOOL_DIR"
-        mkdir -p "$(dirname "$DTBTOOL_BIN")"
-        if [[ ! -e "$DTBTOOL_BIN" || "$DTBTOOL_DIR/dtbtool.c" -nt "$DTBTOOL_BIN" ]]; then
-            printf '[*] Building dtbToolLineage\n'
-            "$HOSTCC" -O2 -Wall -Wextra -o "$DTBTOOL_BIN" \
-                "$DTBTOOL_DIR/dtbtool.c"
-        fi
-    fi
-
-    [[ -x "$DTBTOOL_BIN" ]] || die "dtbToolLineage was not generated"
-}
-
-setup_dtc() {
-    DTC_BIN="${DTC_BIN:-$(command -v dtc || true)}"
-    [[ -x "$DTC_BIN" ]] || die "dtc not found; install device-tree-compiler or set DTC_BIN"
-    DTC_PATH="$(dirname "$DTC_BIN")/"
 }
 
 kernel_make() {
@@ -194,34 +156,8 @@ build_kernel() {
     )
 
     printf '[*] Building with %s parallel jobs\n' "$JOBS"
-    make -j"$JOBS" "${make_args[@]}" Image.gz dtbs
+    make -j"$JOBS" "${make_args[@]}" Image.gz
     [[ -s "$KERNEL_IMG" ]] || die "Image.gz was not generated"
-}
-
-build_qcdt() {
-    local dtb
-    local dtbs=(
-        msm8953-sanders-p1.dtb
-        msm8953-sanders-p2.dtb
-        msm8953-sanders-p3.dtb
-        msm8953-sanders-p4.dtb
-    )
-    local stage="$OUT_DIR/sanders-dtbs"
-
-    for dtb in "${dtbs[@]}"; do
-        [[ -s "$DTB_DIR/$dtb" ]] || die "Missing DTB: $DTB_DIR/$dtb"
-    done
-
-    rm -rf "$stage"
-    mkdir -p "$stage"
-    cp "${dtbs[@]/#/$DTB_DIR/}" "$stage/"
-
-    printf '[*] Generating QCDT\n'
-    "$DTBTOOL_BIN" --force-v2 --page-size 2048 \
-        --dtc-path "$DTC_PATH" \
-        --output-file "$QCDT_IMG" \
-        "$stage/"
-    [[ "$(head -c 4 "$QCDT_IMG")" == QCDT ]] || die "Invalid QCDT"
 }
 
 package_kernel() {
@@ -238,7 +174,6 @@ package_kernel() {
     git clone --depth=1 --quiet --single-branch --branch "$AK3_BRANCH" \
         "$AK3_REPO" "$AK3_DIR"
     cp "$KERNEL_IMG" "$AK3_DIR/Image.gz"
-    cp "$QCDT_IMG" "$AK3_DIR/dt"
 
     command -v zip >/dev/null || die "zip not found"
     (
@@ -279,10 +214,7 @@ printf '[*] Building %s (%s, KSU=%s, OC=%s)\n' \
 setup_toolchain
 [[ "$WITH_KSU" == 0 ]] || setup_ksu
 mkdir -p "$OUT_DIR"
-setup_dtbtool
-setup_dtc
 configure_kernel
 build_kernel
-build_qcdt
 package_kernel
 printf '[+] Completed in %dm %ds\n' "$((SECONDS / 60))" "$((SECONDS % 60))"
