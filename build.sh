@@ -27,6 +27,7 @@ DTBTOOL_BIN="${DTBTOOL_BIN:-$OUT_DIR/host/dtbToolLineage}"
 
 AK3_REPO="${AK3_REPO:-https://github.com/Sanders-Revived/AnyKernel3.git}"
 AK3_BRANCH="${AK3_BRANCH:-sanders}"
+AK3_SUPPORTED_VERSIONS="${AK3_SUPPORTED_VERSIONS:-11 - 15.9}"
 
 KSU_SETUP_URL="${KSU_SETUP_URL:-https://raw.githubusercontent.com/backslashxx/KernelSU/master/kernel/setup.sh}"
 KSU_DIR="$ROOT_DIR/KernelSU"
@@ -59,7 +60,7 @@ Usage: ./build.sh [options]
   -h, --help        Show this help
 
 Useful variables: TC_DIR, DTBTOOL_DIR, DTBTOOL_BIN, DTC_BIN,
-DTBTOOL_REF, KSU_REF, KSU_SETUP_URL and JOBS.
+DTBTOOL_REF, AK3_SUPPORTED_VERSIONS, KSU_REF, KSU_SETUP_URL and JOBS.
 EOF
 }
 
@@ -237,6 +238,13 @@ package_kernel() {
     rm -rf "$AK3_DIR"
     git clone --depth=1 --quiet --single-branch --branch "$AK3_BRANCH" \
         "$AK3_REPO" "$AK3_DIR"
+    if grep -q '^supported\.versions=' "$AK3_DIR/anykernel.sh"; then
+        sed -i "s|^supported\.versions=.*|supported.versions=${AK3_SUPPORTED_VERSIONS}|" \
+            "$AK3_DIR/anykernel.sh"
+    else
+        sed -i "/^device\.name1=/a supported.versions=${AK3_SUPPORTED_VERSIONS}" \
+            "$AK3_DIR/anykernel.sh"
+    fi
     cp "$KERNEL_IMG" "$AK3_DIR/Image.gz"
     cp "$QCDT_IMG" "$AK3_DIR/dt"
 
